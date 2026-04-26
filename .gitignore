@@ -1,0 +1,12 @@
+# Laravel
+/backend/vendor
+/backend/.env
+/backend/storage/*.key
+
+# React
+/frontend/node_modules
+/frontend/build
+
+# General
+.env
+.DS_Store
