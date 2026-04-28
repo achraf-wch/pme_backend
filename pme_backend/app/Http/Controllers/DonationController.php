@@ -15,4 +15,8 @@ class DonationController extends Controller {
         $donation = Donation::create($request->only(['donor_name','donor_email','amount','user_id']) + ['status'=>'pending']);
         return response()->json($donation, 201);
     }
+    public function myDonations(Request $request) {
+    $donations = Donation::where('user_id', $request->user()->id)->latest()->get();
+    return response()->json($donations);
+}
 }

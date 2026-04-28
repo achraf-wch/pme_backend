@@ -13,6 +13,7 @@ return new class extends Migration {
             $table->timestamp('start_time')->nullable();
             $table->timestamp('end_time')->nullable();
             $table->integer('max_attendees')->nullable();
+            $table->string('attachment_path')->nullable()->after('description');
             $table->foreignId('created_by')->constrained('users');
             $table->timestamps();
         });
