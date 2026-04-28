@@ -13,50 +13,54 @@ class NewsController extends Controller
     }
 
     public function store(Request $request)
-    {
-        $data = $request->validate([
-            'title'        => 'required|string|max:255',
-            'content'      => 'required|string',
-            'is_published' => 'nullable|boolean',
-            'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
-        ]);
+{
+    $data = $request->validate([
+        'title'        => 'required|string|max:255',
+        'content'      => 'required|string',
+        'is_published' => 'nullable',      // ← accept any value
+        'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
+    ]);
 
-        $data['author_id'] = auth()->id();
+    $data['author_id']    = auth()->id();
+    $data['is_published'] = filter_var($request->input('is_published'), FILTER_VALIDATE_BOOLEAN);
 
-        if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('news', 'public');
-        }
-
-        unset($data['image']); // don't pass raw file to model
-        $news = News::create($data);
-
-        return response()->json($news->load('author'), 201);
+    if ($request->hasFile('image')) {
+        $data['image_path'] = $request->file('image')->store('news', 'public');
     }
 
-    public function update(Request $request, $id)
-    {
-        $news = News::findOrFail($id);
+    unset($data['image']);
+    $news = News::create($data);
+    return response()->json($news->load('author'), 201);
+}
 
-        $data = $request->validate([
-            'title'        => 'sometimes|required|string|max:255',
-            'content'      => 'sometimes|required|string',
-            'is_published' => 'nullable|boolean',
-            'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
-        ]);
+public function update(Request $request, $news)
+{
+    $newsItem = News::findOrFail(is_object($news) ? $news->id : $news);
 
-        if ($request->hasFile('image')) {
-            // Delete old image if exists
-            if ($news->image_path) {
-                Storage::disk('public')->delete($news->image_path);
-            }
-            $data['image_path'] = $request->file('image')->store('news', 'public');
-        }
+    $data = $request->validate([
+        'title'        => 'sometimes|required|string|max:255',
+        'content'      => 'sometimes|required|string',
+        'is_published' => 'nullable',
+        'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
+    ]);
 
-        unset($data['image']);
-        $news->update($data);
-
-        return response()->json($news->load('author'));
+    if (isset($data['is_published'])) {
+        $data['is_published'] = filter_var($request->input('is_published'), FILTER_VALIDATE_BOOLEAN);
     }
+
+    if ($request->hasFile('image')) {
+        if ($newsItem->image_path) {
+            \Storage::disk('public')->delete($newsItem->image_path);
+        }
+        $data['image_path'] = $request->file('image')->store('news', 'public');
+    }
+
+    unset($data['image']);
+    $newsItem->update($data);
+    return response()->json($newsItem->load('author'));
+}
+
+    
 
     public function destroy($id)
     {

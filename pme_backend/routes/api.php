@@ -7,96 +7,136 @@ use App\Http\Controllers\PollController;
 use App\Http\Controllers\DonationController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\NewsController;
-use App\Http\Controllers\StaticPageController;
+
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\MemberController;
+use App\Http\Controllers\StatsController;
+use App\Http\Controllers\NewsletterController;
+use App\Http\Controllers\SympathizerController;
+use App\Http\Controllers\VolunteerController;
+
 
 // ─────────────────────────────────────────
-// PUBLIC ROUTES (no authentication needed)
+// PUBLIC ROUTES
 // ─────────────────────────────────────────
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login',    [AuthController::class, 'login']);
 
-Route::get('/news', [NewsController::class, 'index']);              // published news for public
-Route::post('/contact', [ContactController::class, 'store']);       // contact form submission
-Route::get('/events', [EventController::class, 'index']);           // public event listing
+// Public content
+Route::get('/news',              [NewsController::class,  'index']);
+Route::get('/news/{news}',       [NewsController::class,  'show']);
+Route::get('/events',            [EventController::class, 'index']);
+Route::get('/events/{id}',       [EventController::class, 'show']);
+Route::get('/static-pages/{slug}', [StaticPageController::class, 'show']);
+
+// Public forms
+Route::post('/contact',              [ContactController::class,     'store']);
+Route::post('/donations',            [DonationController::class,    'store']);
+Route::post('/newsletter/subscribe', [NewsletterController::class,  'subscribe']);
+Route::post('/sympathizer-request',  [SympathizerController::class, 'store']);
+Route::post('/volunteer-request',    [VolunteerController::class,   'store']);
 
 // ─────────────────────────────────────────
-// PROTECTED ROUTES (auth:sanctum required)
+// PROTECTED ROUTES
 // ─────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Basic auth & user info
+    // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/me',      [AuthController::class, 'me']);
 
-    // Membership request submission (any authenticated user, role check inside controller)
+    // Membership request (any authenticated user)
     Route::post('/membership-request', [MembershipRequestController::class, 'store']);
 
-    // Voting – open to any authenticated user, the controller checks poll->target_audience
+    // Voting (controller handles audience check internally)
     Route::post('/vote', [PollController::class, 'vote']);
 
     // ─────────────────────────────────────────
-    // MEMBER or ADMIN only
+    // MEMBER or ADMIN
     // ─────────────────────────────────────────
-    Route::middleware(['role:member,admin'])->group(function () {
+    Route::middleware('role:member,admin,sympathizer')->group(function () {
+
         // Profile
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
 
-        // Member's own donations
-        Route::get('/my-donations', [DonationController::class, 'myDonations']);
+        // Member data
+        Route::get('/my-donations',          [DonationController::class, 'myDonations']);
+        Route::get('/my-events',             [EventController::class,    'myRegistrations']);
+        Route::post('/events/{id}/register', [EventController::class,    'register']);
 
-        // Member's event registrations
-        Route::get('/my-events', [EventController::class, 'myRegistrations']);
-        Route::post('/events/{id}/register', [EventController::class, 'register']);
-
-        // Active polls (only those where user is in target_audience)
+        // Active polls
         Route::get('/polls/active', [PollController::class, 'active']);
     });
 
     // ─────────────────────────────────────────
     // ADMIN ONLY
     // ─────────────────────────────────────────
-    Route::middleware(['role:admin'])->group(function () {
-        // Membership requests management
-        Route::get('/admin/membership-requests', [MembershipRequestController::class, 'indexPending']);
-        Route::put('/admin/membership-requests/{id}/approve', [MembershipRequestController::class, 'approve']);
-        Route::put('/admin/membership-requests/{id}/reject', [MembershipRequestController::class, 'reject']);
+    Route::middleware('role:admin')->group(function () {
 
-        // Polls (admin CRUD & results)
-        Route::get('/polls', [PollController::class, 'index']);
-        Route::post('/polls', [PollController::class, 'store']);
+        // ── Membership requests ──
+        Route::get('/admin/membership-requests',              [MembershipRequestController::class, 'indexPending']);
+        Route::put('/admin/membership-requests/{id}/approve', [MembershipRequestController::class, 'approve']);
+        Route::put('/admin/membership-requests/{id}/reject',  [MembershipRequestController::class, 'reject']);
+
+        // ── Members ──
+        Route::get('/admin/members',         [MemberController::class, 'index']);
+        Route::get('/admin/members/{id}',    [MemberController::class, 'show']);
+        Route::put('/admin/members/{id}',    [MemberController::class, 'update']);
+        Route::delete('/admin/members/{id}', [MemberController::class, 'destroy']);
+
+        // ── Sympathizers ──
+        Route::get('/admin/sympathizers',         [SympathizerController::class, 'index']);
+        Route::delete('/admin/sympathizers/{id}', [SympathizerController::class, 'destroy']);
+
+        // ── Volunteers ──
+        Route::get('/admin/volunteers',         [VolunteerController::class, 'index']);
+        Route::delete('/admin/volunteers/{id}', [VolunteerController::class, 'destroy']);
+
+        // ── Polls ──
+        Route::get('/polls',              [PollController::class, 'index']);
+        Route::post('/polls',             [PollController::class, 'store']);
+        Route::put('/polls/{id}',         [PollController::class, 'update']);
+        Route::delete('/polls/{id}',      [PollController::class, 'destroy']);
         Route::get('/polls/{id}/results', [PollController::class, 'results']);
 
-        // Donations (admin list & status update)
-        Route::get('/donations', [DonationController::class, 'index']);
-        Route::put('/donations/{donation}', [DonationController::class, 'update']);
+        // ── Donations ──
+        Route::get('/donations',               [DonationController::class, 'index']);
+        Route::put('/donations/{donation}',    [DonationController::class, 'update']);
+        Route::delete('/donations/{donation}', [DonationController::class, 'destroy']);
 
-        // News (full CRUD – index is public, but show/store/update/destroy are admin)
-        Route::post('/news', [NewsController::class, 'store']);
-        Route::get('/news/{news}', [NewsController::class, 'show']);
-        Route::put('/news/{news}', [NewsController::class, 'update']);
+        // ── News ──
+        Route::post('/news',          [NewsController::class, 'store']);
+        Route::put('/news/{news}',    [NewsController::class, 'update']);
         Route::delete('/news/{news}', [NewsController::class, 'destroy']);
 
-        // Contacts (view list – store is public)
-        Route::get('/contacts', [ContactController::class, 'index']);
+        // ── Contacts ──
+        Route::get('/contacts',         [ContactController::class, 'index']);
+        Route::delete('/contacts/{id}', [ContactController::class, 'destroy']);
 
-        // Events (full CRUD – index is public)
-        Route::post('/events', [EventController::class, 'store']);
-        Route::get('/events/{id}', [EventController::class, 'show']);
-        Route::put('/events/{id}', [EventController::class, 'update']);
-        Route::delete('/events/{id}', [EventController::class, 'destroy']);
+        // ── Events ──
+        Route::post('/events',                   [EventController::class, 'store']);
+        Route::put('/events/{id}',               [EventController::class, 'update']);
+        Route::delete('/events/{id}',            [EventController::class, 'destroy']);
         Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
 
-        // Static pages (edit)
-        Route::get('/static-pages', [StaticPageController::class, 'index']);
+        // ── Static pages ──
+        Route::get('/static-pages',        [StaticPageController::class, 'index']);
         Route::put('/static-pages/{slug}', [StaticPageController::class, 'update']);
 
-        // Media library
-        Route::get('/media', [MediaController::class, 'index']);
-        Route::post('/media', [MediaController::class, 'store']);
+        // ── Media ──
+        Route::get('/media',            [MediaController::class, 'index']);
+        Route::post('/media',           [MediaController::class, 'store']);
         Route::delete('/media/{media}', [MediaController::class, 'destroy']);
+
+        // ── Newsletter ──
+        Route::get('/admin/newsletter',          [NewsletterController::class, 'index']);
+        Route::delete('/admin/newsletter/{id}',  [NewsletterController::class, 'destroy']);
+        Route::post('/admin/newsletter/send',    [NewsletterController::class, 'send']);
+
+        // ── Stats ──
+        Route::get('/admin/stats', [StatsController::class, 'index']);
     });
 });

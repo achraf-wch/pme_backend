@@ -10,10 +10,9 @@ use Illuminate\Support\Facades\Auth;
 
 class MembershipRequestController extends Controller
 {
-    // 1. SUBMIT REQUEST (by visitor)
+    // 1. Visitor submits a request to become a member
     public function store(Request $request)
     {
-        // Only authenticated users can submit request
         $user = $request->user();
 
         // Check if user is already a member
@@ -45,7 +44,7 @@ class MembershipRequestController extends Controller
         ], 201);
     }
 
-    // 2. GET ALL PENDING REQUESTS (admin only)
+    // 2. Admin: get all pending requests
     public function indexPending()
     {
         $this->authorizeAdmin();
@@ -57,7 +56,7 @@ class MembershipRequestController extends Controller
         return response()->json($pending);
     }
 
-    // 3. APPROVE REQUEST (admin only)
+    // 3. Admin: approve a request
     public function approve($id)
     {
         $this->authorizeAdmin();
@@ -68,13 +67,11 @@ class MembershipRequestController extends Controller
             return response()->json(['message' => 'Request already processed.'], 400);
         }
 
-        // Update the user's role to 'member'
         $memberRole = Role::where('name', 'member')->first();
         $user = $membershipRequest->user;
         $user->role_id = $memberRole->id;
         $user->save();
 
-        // Update the request status
         $membershipRequest->status = 'approved';
         $membershipRequest->reviewed_by = Auth::id();
         $membershipRequest->reviewed_at = now();
@@ -85,7 +82,7 @@ class MembershipRequestController extends Controller
         ]);
     }
 
-    // 4. REJECT REQUEST (admin only)
+    // 4. Admin: reject a request
     public function reject($id)
     {
         $this->authorizeAdmin();
