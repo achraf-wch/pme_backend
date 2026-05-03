@@ -1,11 +1,15 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\RecordsAuditLogs;
 use App\Models\Donation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class DonationController extends Controller
 {
+    use RecordsAuditLogs;
+
     public function index()
     {
         return response()->json(Donation::with('user')->latest()->get());
@@ -14,19 +18,36 @@ class DonationController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'   => 'required|string|max:255',
-            'email'  => 'required|email',
+            'name' => 'nullable|string|max:255',
+            'email' => 'nullable|email',
+            'donor_name' => 'nullable|string|max:255',
+            'donor_email' => 'nullable|email',
             'amount' => 'required|numeric|min:1',
-            'note'   => 'nullable|string',
+            'note' => 'nullable|string|max:1000',
+            'frequency' => 'nullable|in:once,monthly',
         ]);
 
+        $data['name'] = $data['name'] ?? $data['donor_name'] ?? null;
+        $data['email'] = $data['email'] ?? $data['donor_email'] ?? null;
+        unset($data['donor_name'], $data['donor_email']);
+
+        if (!$data['name'] || !$data['email']) {
+            return response()->json(['message' => 'Name and email are required.'], 422);
+        }
+
         $data['status'] = 'pending';
+        $data['payment_reference'] = 'DON-' . now()->format('Ymd') . '-' . Str::upper(Str::random(8));
 
         if ($request->user()) {
             $data['user_id'] = $request->user()->id;
         }
 
         $donation = Donation::create($data);
+        $this->audit($request, 'donation.created', $donation, [
+            'amount' => $donation->amount,
+            'status' => $donation->status,
+        ]);
+
         return response()->json($donation, 201);
     }
 
@@ -34,9 +55,11 @@ class DonationController extends Controller
     {
         $donation = Donation::findOrFail($id);
         $request->validate([
-            'status' => 'required|in:pending,confirmed,failed',
+            'status' => 'required|in:pending,completed,confirmed,failed',
         ]);
-        $donation->update(['status' => $request->status]);
+        $status = $request->status === 'confirmed' ? 'completed' : $request->status;
+        $donation->update(['status' => $status]);
+        $this->audit($request, 'donation.status_updated', $donation, ['status' => $status]);
         return response()->json($donation);
     }
 

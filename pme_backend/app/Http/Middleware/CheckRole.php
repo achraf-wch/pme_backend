@@ -15,8 +15,8 @@ class CheckRole
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        // Handle both: role as string column OR role as relationship
-        $userRole = is_object($user->role) ? $user->role->name : $user->role;
+        $user->loadMissing('role');
+        $userRole = optional($user->role)->name;
 
         if (!in_array($userRole, $roles)) {
             return response()->json(['message' => 'Forbidden: insufficient permissions'], 403);

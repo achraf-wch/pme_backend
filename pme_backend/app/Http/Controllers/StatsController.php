@@ -11,6 +11,7 @@ use App\Models\Poll;
 use App\Models\NewsletterSubscriber;
 use App\Models\Sympathizer;
 use App\Models\Volunteer;
+use App\Models\AuditLog;
 
 class StatsController extends Controller
 {
@@ -41,7 +42,7 @@ class StatsController extends Controller
             ],
             'donations' => [
                 'total'  => Donation::count(),
-                'amount' => Donation::where('status', 'confirmed')->sum('amount'),
+                'amount' => Donation::whereIn('status', ['completed', 'confirmed'])->sum('amount'),
             ],
             'events' => [
                 'total'         => Event::count(),
@@ -66,6 +67,12 @@ class StatsController extends Controller
             'volunteers' => [
                 'total' => class_exists(\App\Models\Volunteer::class)
                     ? Volunteer::count() : 0,
+            ],
+            'audit' => [
+                'total' => class_exists(\App\Models\AuditLog::class) ? AuditLog::count() : 0,
+                'recent_sensitive_actions' => class_exists(\App\Models\AuditLog::class)
+                    ? AuditLog::latest()->limit(10)->get()
+                    : [],
             ],
         ]);
     }

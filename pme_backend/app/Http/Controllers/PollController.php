@@ -7,124 +7,243 @@ use App\Models\PollOption;
 use App\Models\Vote;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Concerns\RecordsAuditLogs;
 
 class PollController extends Controller
 {
-    // Admin: list all polls
+    use RecordsAuditLogs;
+
+    /**
+     * Admin: list all polls.
+     */
     public function index()
     {
-        $polls = Poll::with('options')->get();
+        $polls = Poll::with('options')->latest()->get();
         return response()->json($polls);
     }
 
-    // Member: get active polls that user is allowed to vote on
-   public function active(Request $request)
-{
-    $user = $request->user()->load('role'); // ✅ add this
-    $now = now();
+    /**
+     * Public / member-facing: active polls the user (or guest) can see.
+     *
+     * GET /api/polls/feed
+     * - Guests see polls with 'public' in target_audience
+     * - Authenticated users see 'public' + their role
+     *
+     * Note: 'public' audience means the poll is shown (read-only / displayed)
+     * on the homepage. Voting still requires userCanVote() to pass.
+     */
+    public function feed(Request $request)
+    {
+        $user = $request->user()?->load('role');
+        $role = optional($user?->role)->name;
+        $now  = now();
 
-    $polls = Poll::with('options')
-        ->where('start_date', '<=', $now)
-        ->where('end_date', '>=', $now)
-        ->get();
+        $polls = Poll::with('options')
+            ->where('start_date', '<=', $now)
+            ->where('end_date', '>=', $now)
+            ->visibleTo($role)
+            ->get()
+            ->map(function ($poll) use ($user) {
+                $poll->can_vote = $user ? $poll->userCanVote($user) : false;
+                $poll->has_voted = $user
+                    ? Vote::where('poll_id', $poll->id)->where('user_id', $user->id)->exists()
+                    : false;
+                return $poll;
+            });
 
-    $filtered = $polls->filter(function ($poll) use ($user) {
-        return $poll->userCanVote($user);
-    })->values();
+        return response()->json($polls);
+    }
 
-    return response()->json($filtered);
-}
+    /**
+     * Member: get active polls the authenticated user is allowed to vote on.
+     */
+    public function active(Request $request)
+    {
+        $user = $request->user()->load('role');
+        $now  = now();
 
-    // Admin: create a new poll
+        $polls = Poll::with('options')
+            ->where('start_date', '<=', $now)
+            ->where('end_date', '>=', $now)
+            ->get()
+            ->filter(fn($poll) => $poll->userCanVote($user))
+            ->map(function ($poll) use ($user) {
+                $poll->has_voted = Vote::where('poll_id', $poll->id)
+                    ->where('user_id', $user->id)
+                    ->exists();
+                return $poll;
+            })
+            ->values();
+
+        return response()->json($polls);
+    }
+
+    /**
+     * Admin: create a new poll.
+     */
     public function store(Request $request)
     {
         $request->validate([
-            'title' => 'required|string',
-            'description' => 'nullable|string',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'target_audience' => 'required|array|min:1',
-            'target_audience.*' => 'string|in:visitor,sympathizer,member,admin,local_official,central_admin,super_admin',
-            'options' => 'required|array|min:2',
-            'options.*' => 'required|string',
+            'title'             => 'required|string',
+            'description'       => 'nullable|string',
+            'start_date'        => 'required|date',
+            'end_date'          => 'required|date|after:start_date',
+            'target_audience'   => 'required|array|min:1',
+            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'is_secret'         => 'nullable|boolean',
+            'options'           => 'required|array|min:2',
+            'options.*'         => 'required|string',
         ]);
 
         $poll = Poll::create([
-            'title' => $request->title,
-            'description' => $request->description,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
-            'is_secret' => false,
-            'created_by' => Auth::id(),
+            'title'           => $request->title,
+            'description'     => $request->description,
+            'start_date'      => $request->start_date,
+            'end_date'        => $request->end_date,
+            'is_secret'       => $request->boolean('is_secret'),
+            'created_by'      => Auth::id(),
             'target_audience' => $request->target_audience,
         ]);
 
         foreach ($request->options as $index => $optionText) {
             PollOption::create([
-                'poll_id' => $poll->id,
-                'option_text' => $optionText,
+                'poll_id'       => $poll->id,
+                'option_text'   => $optionText,
                 'display_order' => $index,
             ]);
         }
 
+        $this->audit($request, 'poll.created', $poll, ['target_audience' => $poll->target_audience]);
+
         return response()->json($poll->load('options'), 201);
     }
 
-    // Member: submit vote
+    /**
+     * Member: submit a vote.
+     */
     public function vote(Request $request)
     {
         $request->validate([
-            'poll_id' => 'required|exists:polls,id',
+            'poll_id'   => 'required|exists:polls,id',
             'option_id' => 'required|exists:poll_options,id',
         ]);
 
-        $user = $request->user();
+        $user = $request->user()->load('role');
         $poll = Poll::findOrFail($request->poll_id);
+        $option = PollOption::where('id', $request->option_id)
+            ->where('poll_id', $poll->id)
+            ->first();
 
-        // Check poll is active
-        $now = now();
+        if (!$option) {
+            return response()->json(['message' => 'Selected option does not belong to this poll'], 422);
+        }
+
+        $now  = now();
+
         if ($poll->start_date > $now || $poll->end_date < $now) {
             return response()->json(['message' => 'Poll is not active'], 400);
         }
 
-        // Check user can vote
         if (!$poll->userCanVote($user)) {
             return response()->json(['message' => 'You are not allowed to vote in this poll'], 403);
         }
 
-        // Check if already voted
         $existing = Vote::where('poll_id', $poll->id)
-                        ->where('user_id', $user->id)
-                        ->exists();
+            ->where('user_id', $user->id)
+            ->exists();
+
         if ($existing) {
             return response()->json(['message' => 'You have already voted'], 400);
         }
 
         Vote::create([
-            'poll_id' => $poll->id,
+            'poll_id'   => $poll->id,
             'option_id' => $request->option_id,
-            'user_id' => $user->id,
-            'voted_at' => now(),
+            'user_id'   => $user->id,
+            'voted_at'  => now(),
+        ]);
+
+        $this->audit($request, 'poll.vote_cast', $poll, [
+            'is_secret' => $poll->is_secret,
+            'option_id' => $poll->is_secret ? null : $request->option_id,
         ]);
 
         return response()->json(['message' => 'Vote recorded successfully']);
     }
 
-    // Admin: get results of a poll
+    public function update(Request $request, $id)
+    {
+        $poll = Poll::withCount('votes')->findOrFail($id);
+
+        if ($poll->votes_count > 0 && $request->has('options')) {
+            return response()->json(['message' => 'Poll options cannot be changed after votes are cast'], 422);
+        }
+
+        $data = $request->validate([
+            'title'             => 'sometimes|required|string',
+            'description'       => 'nullable|string',
+            'start_date'        => 'sometimes|required|date',
+            'end_date'          => 'sometimes|required|date|after:start_date',
+            'target_audience'   => 'sometimes|required|array|min:1',
+            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'is_secret'         => 'nullable|boolean',
+            'options'           => 'sometimes|required|array|min:2',
+            'options.*'         => 'required|string',
+        ]);
+
+        if (array_key_exists('is_secret', $data)) {
+            $data['is_secret'] = $request->boolean('is_secret');
+        }
+
+        $options = $data['options'] ?? null;
+        unset($data['options']);
+
+        $poll->update($data);
+
+        if ($options) {
+            $poll->options()->delete();
+            foreach ($options as $index => $optionText) {
+                PollOption::create([
+                    'poll_id' => $poll->id,
+                    'option_text' => $optionText,
+                    'display_order' => $index,
+                ]);
+            }
+        }
+
+        $this->audit($request, 'poll.updated', $poll, ['target_audience' => $poll->target_audience]);
+
+        return response()->json($poll->load('options'));
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $poll = Poll::findOrFail($id);
+        $this->audit($request, 'poll.deleted', $poll, ['title' => $poll->title]);
+        $poll->delete();
+
+        return response()->json(['message' => 'Deleted']);
+    }
+
+    /**
+     * Admin: get results of a poll.
+     */
     public function results($id)
     {
-        $poll = Poll::with('options')->findOrFail($id);
+        $poll    = Poll::with('options')->findOrFail($id);
         $results = [];
+
         foreach ($poll->options as $option) {
             $results[] = [
-                'option_id' => $option->id,
+                'option_id'   => $option->id,
                 'option_text' => $option->option_text,
-                'votes' => $option->votes()->count(),
+                'votes'       => $option->votes()->count(),
             ];
         }
+
         return response()->json([
-            'poll' => $poll,
-            'results' => $results,
+            'poll'        => $poll,
+            'results'     => $results,
             'total_votes' => $poll->votes()->count(),
         ]);
     }
