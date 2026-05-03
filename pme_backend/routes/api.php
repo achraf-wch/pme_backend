@@ -16,6 +16,7 @@ use App\Http\Controllers\StatsController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\SympathizerController;
 use App\Http\Controllers\VolunteerController;
+use App\Http\Controllers\StaticPageController;
 
 
 // ─────────────────────────────────────────
@@ -24,7 +25,12 @@ use App\Http\Controllers\VolunteerController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
 
-// Public content
+// ADD THESE THREE LINES FOR PUBLIC FEEDS
+Route::get('/news/feed',   [NewsController::class, 'feed']);
+Route::get('/events/feed', [EventController::class, 'feed']);
+Route::get('/polls/feed',  [PollController::class, 'feed']);
+
+// Public content (still needed for admin/other)
 Route::get('/news',              [NewsController::class,  'index']);
 Route::get('/news/{news}',       [NewsController::class,  'show']);
 Route::get('/events',            [EventController::class, 'index']);
@@ -56,7 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────
     // MEMBER or ADMIN
     // ─────────────────────────────────────────
-    Route::middleware('role:member,admin,sympathizer')->group(function () {
+    Route::middleware('role:member,admin,visitor')->group(function () {
 
         // Profile
         Route::get('/profile', [ProfileController::class, 'show']);
