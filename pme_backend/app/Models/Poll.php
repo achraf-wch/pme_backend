@@ -6,16 +6,22 @@ use Illuminate\Database\Eloquent\Model;
 
 class Poll extends Model
 {
-   protected $fillable = [
-    'title', 'description', 'start_date', 'end_date', 
-    'is_secret', 'created_by', 'target_audience'
-];
+    protected $fillable = [
+        'title',
+        'description',
+        'start_date',
+        'end_date',
+        'is_secret',
+        'created_by',
+        'target_audience',
+    ];
 
-protected $casts = [
-    'start_date' => 'datetime',
-    'end_date' => 'datetime',
-    'target_audience' => 'array',
-];
+    protected $casts = [
+        'start_date'      => 'datetime',
+        'end_date'        => 'datetime',
+        'is_secret'       => 'boolean',
+        'target_audience' => 'array',
+    ];
 
     public function options()
     {
@@ -31,12 +37,35 @@ protected $casts = [
     {
         return $this->belongsTo(User::class, 'created_by');
     }
-       public function userCanVote($user): bool
+
+    public function userCanVote($user): bool
     {
         if (!$user || !$user->role) {
             return false;
         }
 
         return in_array($user->role->name, $this->target_audience ?? []);
+    }
+
+    /**
+     * Scope: active polls visible to a given role (or public).
+     */
+    public function scopeVisibleTo($query, ?string $role = null)
+    {
+        return $query->where(function ($q) use ($role) {
+            $q->whereJsonContains('target_audience', 'public');
+            if ($role) {
+                $q->orWhereJsonContains('target_audience', $role);
+            }
+        });
+    }
+
+    /**
+     * Scope: only currently active polls.
+     */
+    public function scopeActive($query)
+    {
+        $now = now();
+        return $query->where('start_date', '<=', $now)->where('end_date', '>=', $now);
     }
 }
