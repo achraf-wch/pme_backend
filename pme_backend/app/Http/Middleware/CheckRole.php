@@ -18,7 +18,11 @@ class CheckRole
         $user->loadMissing('role');
         $userRole = optional($user->role)->name;
 
-        if (!in_array($userRole, $roles)) {
+        if ($userRole === 'super_admin') {
+            return $next($request);
+        }
+
+        if (!in_array($userRole, $roles, true)) {
             return response()->json(['message' => 'Forbidden: insufficient permissions'], 403);
         }
 

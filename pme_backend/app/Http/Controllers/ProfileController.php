@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Hash;
 class ProfileController extends Controller
 {
     public function show(Request $request) {
-        return response()->json($request->user()->load('role'));
+        return response()->json($request->user()->load(['role', 'partyBranch']));
     }
 
     public function update(Request $request) {
@@ -22,6 +22,6 @@ class ProfileController extends Controller
             $validated['password'] = Hash::make($validated['password']);
         }
         $user->update($validated);
-        return response()->json($user);
+        return response()->json($user->load(['role', 'partyBranch']));
     }
 }

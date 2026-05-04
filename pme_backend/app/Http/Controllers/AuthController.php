@@ -23,7 +23,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user'  => $user->load('role'),
+            'user'  => $user->load(['role', 'partyBranch']),
         ], 201);
     }
 
@@ -40,11 +40,15 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
+        if (!$user->is_active) {
+            return response()->json(['message' => 'Account is disabled'], 403);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user'  => $user->load('role'),
+            'user'  => $user->load(['role', 'partyBranch']),
         ]);
     }
 
@@ -56,6 +60,6 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return response()->json($request->user()->load('role'));
+        return response()->json($request->user()->load(['role', 'partyBranch']));
     }
 }

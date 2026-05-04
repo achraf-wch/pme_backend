@@ -106,7 +106,9 @@ class MembershipRequestController extends Controller
     // Helper to ensure only admin can call these methods
     private function authorizeAdmin()
     {
-        if (Auth::user()->role->name !== 'admin') {
+        $role = Auth::user()->loadMissing('role')->role?->name;
+
+        if (!in_array($role, ['central_admin', 'admin', 'super_admin'], true)) {
             abort(403, 'Unauthorized. Admin access required.');
         }
     }
