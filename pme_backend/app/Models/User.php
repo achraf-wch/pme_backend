@@ -11,7 +11,7 @@ class User extends Authenticatable
     use HasApiTokens, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'role_id', 'is_active',
+        'name', 'email', 'password', 'role_id', 'party_branch_id', 'is_active',
     ];
 
     protected $hidden = [
@@ -21,6 +21,11 @@ class User extends Authenticatable
     public function role()
     {
         return $this->belongsTo(Role::class);
+    }
+
+    public function partyBranch()
+    {
+        return $this->belongsTo(PartyBranch::class);
     }
 
     public function membershipRequest()
