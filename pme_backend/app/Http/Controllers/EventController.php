@@ -4,17 +4,26 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\EventRegistration;
+use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class EventController extends Controller
 {
+    use ScopesByPartyBranch;
+
     /**
      * Admin: all events regardless of audience.
      */
     public function index()
     {
-        return response()->json(Event::with('creator')->latest()->get());
+        $query = Event::with(['creator', 'partyBranch'])->latest();
+
+        if ($user = request()->user()) {
+            $this->applyBranchScope($query, $user);
+        }
+
+        return response()->json($query->get());
     }
 
     /**
@@ -56,10 +65,13 @@ class EventController extends Controller
             'max_attendees' => 'nullable|integer|min:1',
             'audience'      => 'required|array|min:1',
             'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'party_branch_id' => 'nullable|exists:party_branches,id',
             'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
         ]);
 
-        $data['created_by'] = auth()->id();
+        $user = $request->user();
+        $data['created_by'] = $user->id;
+        $data['party_branch_id'] = $this->branchIdForWrite($user, $data['party_branch_id'] ?? null);
 
         if ($request->hasFile('attachment')) {
             $data['attachment_path'] = $request->file('attachment')->store('events', 'public');
@@ -69,7 +81,7 @@ class EventController extends Controller
 
         $event = Event::create($data);
 
-        return response()->json($event->load('creator'), 201);
+        return response()->json($event->load(['creator', 'partyBranch']), 201);
     }
 
     /**
@@ -78,6 +90,7 @@ class EventController extends Controller
     public function update(Request $request, $id)
     {
         $event = Event::findOrFail($id);
+        $this->ensureCanAccessEvent($request, $event);
 
         $data = $request->validate([
             'title'         => 'sometimes|required|string|max:255',
@@ -88,8 +101,13 @@ class EventController extends Controller
             'max_attendees' => 'nullable|integer|min:1',
             'audience'      => 'sometimes|required|array|min:1',
             'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'party_branch_id' => 'nullable|exists:party_branches,id',
             'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
         ]);
+
+        if (array_key_exists('party_branch_id', $data)) {
+            $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id']);
+        }
 
         if ($request->hasFile('attachment')) {
             if ($event->attachment_path) {
@@ -101,7 +119,7 @@ class EventController extends Controller
         unset($data['attachment']);
         $event->update($data);
 
-        return response()->json($event->load('creator'));
+        return response()->json($event->load(['creator', 'partyBranch']));
     }
 
     /**
@@ -110,6 +128,7 @@ class EventController extends Controller
     public function destroy($id)
     {
         $event = Event::findOrFail($id);
+        $this->ensureCanAccessEvent(request(), $event);
 
         if ($event->attachment_path) {
             Storage::disk('public')->delete($event->attachment_path);
@@ -125,8 +144,11 @@ class EventController extends Controller
      */
     public function registrations($id)
     {
+        $event = Event::findOrFail($id);
+        $this->ensureCanAccessEvent(request(), $event);
+
         $registrations = EventRegistration::where('event_id', $id)
-            ->with('user')
+            ->with(['user', 'user.partyBranch'])
             ->get();
 
         return response()->json($registrations);
@@ -170,5 +192,14 @@ class EventController extends Controller
             ->get();
 
         return response()->json($registrations);
+    }
+
+    private function ensureCanAccessEvent(Request $request, Event $event): void
+    {
+        $branchIds = $this->branchIdsVisibleTo($request->user());
+
+        if ($branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
+            abort(403, 'You are not allowed to manage this event.');
+        }
     }
 }

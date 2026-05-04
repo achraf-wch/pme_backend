@@ -12,11 +12,17 @@ use App\Models\NewsletterSubscriber;
 use App\Models\Sympathizer;
 use App\Models\Volunteer;
 use App\Models\AuditLog;
+use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 
 class StatsController extends Controller
 {
+    use ScopesByPartyBranch;
+
     public function index()
     {
+        $user = request()->user();
+        $role = $user?->loadMissing('role')->role?->name;
+
         $votesCount = 0;
         if (class_exists(\App\Models\Vote::class)) {
             $votesCount = \App\Models\Vote::count();
@@ -27,13 +33,44 @@ class StatsController extends Controller
         // Helper to count users by role name
         $countByRole = fn($name) => User::whereHas('role', fn($q) => $q->where('name', $name))->count();
 
-        return response()->json([
+        $eventQuery = Event::query();
+        if ($user) {
+            $this->applyBranchScope($eventQuery, $user);
+        }
+
+        $base = [
+            'events' => [
+                'total'         => (clone $eventQuery)->count(),
+                'registrations' => EventRegistration::whereIn('event_id', (clone $eventQuery)->pluck('id'))->count(),
+            ],
+            'news' => [
+                'total'     => News::count(),
+                'published' => News::where('is_published', true)->count(),
+            ],
+        ];
+
+        if (in_array($role, ['local_official', 'regional_official'], true)) {
+            return response()->json([
+                ...$base,
+                'scope' => [
+                    'role' => $role,
+                    'level' => 'partial_reports',
+                    'message' => 'Partial activity reports for local and regional officials.',
+                ],
+            ]);
+        }
+
+        $full = [
             'users' => [
                 'total'        => User::count(),
                 'members'      => $countByRole('member'),
                 'sympathizers' => $countByRole('sympathizer'),
                 'volunteers'   => $countByRole('volunteer'),
+                'local_officials' => $countByRole('local_official'),
+                'regional_officials' => $countByRole('regional_official'),
+                'central_admins' => $countByRole('central_admin'),
                 'admins'       => $countByRole('admin'),
+                'super_admins' => $countByRole('super_admin'),
             ],
             'membership_requests' => [
                 'pending'  => MembershipRequest::where('status', 'pending')->count(),
@@ -44,14 +81,7 @@ class StatsController extends Controller
                 'total'  => Donation::count(),
                 'amount' => Donation::whereIn('status', ['completed', 'confirmed'])->sum('amount'),
             ],
-            'events' => [
-                'total'         => Event::count(),
-                'registrations' => EventRegistration::count(),
-            ],
-            'news' => [
-                'total'     => News::count(),
-                'published' => News::where('is_published', true)->count(),
-            ],
+            ...$base,
             'polls' => [
                 'total' => Poll::count(),
                 'votes' => $votesCount,
@@ -68,12 +98,17 @@ class StatsController extends Controller
                 'total' => class_exists(\App\Models\Volunteer::class)
                     ? Volunteer::count() : 0,
             ],
-            'audit' => [
+        ];
+
+        if ($role === 'super_admin') {
+            $full['audit'] = [
                 'total' => class_exists(\App\Models\AuditLog::class) ? AuditLog::count() : 0,
                 'recent_sensitive_actions' => class_exists(\App\Models\AuditLog::class)
                     ? AuditLog::latest()->limit(10)->get()
                     : [],
-            ],
-        ]);
+            ];
+        }
+
+        return response()->json($full);
     }
 }

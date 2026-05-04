@@ -2,42 +2,62 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Role;
+use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 use Illuminate\Http\Request;
 
 class MemberController extends Controller
 {
+    use ScopesByPartyBranch;
+
     public function index()
     {
-        return response()->json(
-            User::whereHas('role', fn($q) => $q->where('name', 'member'))
-                ->with('role')
-                ->latest()
-                ->get()
-        );
+        $query = User::with(['role', 'partyBranch'])->latest();
+        $this->applyBranchScope($query, request()->user());
+
+        return response()->json($query->get());
     }
 
     public function show($id)
     {
-        return response()->json(User::with('role')->findOrFail($id));
+        $query = User::with(['role', 'partyBranch'])->whereKey($id);
+        $this->applyBranchScope($query, request()->user());
+
+        return response()->json($query->firstOrFail());
     }
 
     public function update(Request $request, $id)
     {
-        $user = User::findOrFail($id);
+        $query = User::query()->whereKey($id);
+        $this->applyBranchScope($query, $request->user());
+        $user = $query->firstOrFail();
 
         $data = $request->validate([
             'name'    => 'sometimes|string|max:255',
             'email'   => 'sometimes|email|unique:users,email,' . $id,
             'role_id' => 'sometimes|exists:roles,id',
+            'role' => 'sometimes|string|exists:roles,name',
+            'party_branch_id' => 'nullable|exists:party_branches,id',
         ]);
 
+        if (isset($data['role'])) {
+            $data['role_id'] = Role::where('name', $data['role'])->value('id');
+            unset($data['role']);
+        }
+
+        if (array_key_exists('party_branch_id', $data)) {
+            $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id']);
+        }
+
         $user->update($data);
-        return response()->json($user->load('role'));
+        return response()->json($user->load(['role', 'partyBranch']));
     }
 
     public function destroy($id)
     {
-        User::findOrFail($id)->delete();
+        $query = User::query()->whereKey($id);
+        $this->applyBranchScope($query, request()->user());
+        $query->firstOrFail()->delete();
         return response()->json(['message' => 'Member deleted']);
     }
 }

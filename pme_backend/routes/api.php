@@ -17,7 +17,7 @@ use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\SympathizerController;
 use App\Http\Controllers\VolunteerController;
 use App\Http\Controllers\StaticPageController;
-
+use App\Http\Controllers\BranchController;
 
 // ─────────────────────────────────────────
 // PUBLIC ROUTES
@@ -62,7 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────
     // MEMBER or ADMIN
     // ─────────────────────────────────────────
-    Route::middleware('role:member,admin,visitor')->group(function () {
+    Route::middleware('role:visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,admin,super_admin')->group(function () {
 
         // Profile
         Route::get('/profile', [ProfileController::class, 'show']);
@@ -78,9 +78,28 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // ─────────────────────────────────────────
-    // ADMIN ONLY
+    // LOCAL / REGIONAL OFFICIALS
+    // الاطلاع على المعطيات المخول لها وإدارة بعض الأنشطة والتقارير الجزئية
     // ─────────────────────────────────────────
-    Route::middleware('role:admin')->group(function () {
+    Route::middleware('role:local_official,regional_official,central_admin,admin,super_admin')->group(function () {
+        Route::get('/admin/stats', [StatsController::class, 'index']);
+        Route::get('/admin/branches', [BranchController::class, 'index']);
+
+        Route::post('/events',                   [EventController::class, 'store']);
+        Route::put('/events/{id}',               [EventController::class, 'update']);
+        Route::delete('/events/{id}',            [EventController::class, 'destroy']);
+        Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
+
+        Route::get('/media',            [MediaController::class, 'index']);
+        Route::post('/media',           [MediaController::class, 'store']);
+        Route::delete('/media/{media}', [MediaController::class, 'destroy']);
+    });
+
+    // ─────────────────────────────────────────
+    // CENTRAL ADMINISTRATION
+    // إدارة المحتوى والعضوية والتبرعات والتصويتات واستخراج التقارير
+    // ─────────────────────────────────────────
+    Route::middleware('role:central_admin,admin,super_admin')->group(function () {
 
         // ── Membership requests ──
         Route::get('/admin/membership-requests',              [MembershipRequestController::class, 'indexPending']);
@@ -123,26 +142,27 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/contacts/{id}', [ContactController::class, 'destroy']);
 
         // ── Events ──
-        Route::post('/events',                   [EventController::class, 'store']);
-        Route::put('/events/{id}',               [EventController::class, 'update']);
-        Route::delete('/events/{id}',            [EventController::class, 'destroy']);
-        Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
+        // Event write routes are available to local/regional officials above.
 
         // ── Static pages ──
         Route::get('/static-pages',        [StaticPageController::class, 'index']);
         Route::put('/static-pages/{slug}', [StaticPageController::class, 'update']);
 
         // ── Media ──
-        Route::get('/media',            [MediaController::class, 'index']);
-        Route::post('/media',           [MediaController::class, 'store']);
-        Route::delete('/media/{media}', [MediaController::class, 'destroy']);
+        // Media routes are available to local/regional officials above.
 
         // ── Newsletter ──
         Route::get('/admin/newsletter',          [NewsletterController::class, 'index']);
         Route::delete('/admin/newsletter/{id}',  [NewsletterController::class, 'destroy']);
         Route::post('/admin/newsletter/send',    [NewsletterController::class, 'send']);
 
-        // ── Stats ──
-        Route::get('/admin/stats', [StatsController::class, 'index']);
+    });
+
+    // ─────────────────────────────────────────
+    // SUPER ADMIN
+    // صلاحيات كاملة على النظام والإعدادات والأمان
+    // ─────────────────────────────────────────
+    Route::middleware('role:super_admin')->group(function () {
+        // Reserved for system settings and security endpoints.
     });
 });
