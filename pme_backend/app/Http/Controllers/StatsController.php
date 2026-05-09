@@ -69,8 +69,7 @@ class StatsController extends Controller
                 'local_officials' => $countByRole('local_official'),
                 'regional_officials' => $countByRole('regional_official'),
                 'central_admins' => $countByRole('central_admin'),
-                'admins'       => $countByRole('admin'),
-                'super_admins' => $countByRole('super_admin'),
+                'supervisors' => $countByRole('super_admin'),
             ],
             'membership_requests' => [
                 'pending'  => MembershipRequest::where('status', 'pending')->count(),

@@ -44,7 +44,9 @@ class Poll extends Model
             return false;
         }
 
-        return in_array($user->role->name, $this->target_audience ?? []);
+        $audience = $this->target_audience ?? [];
+
+        return in_array('public', $audience, true) || in_array($user->role->name, $audience, true);
     }
 
     /**
