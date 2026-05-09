@@ -34,15 +34,14 @@ class AdminSeeder extends Seeder
         );
 
         $accounts = [
-            ['role' => 'super_admin', 'name' => 'Super Admin', 'email' => 'super.admin@example.com', 'branch_id' => $national->id],
-            ['role' => 'admin', 'name' => 'Administrateur Général', 'email' => 'admin@example.com', 'branch_id' => $national->id],
-            ['role' => 'central_admin', 'name' => 'Administration Centrale', 'email' => 'central.admin@example.com', 'branch_id' => $national->id],
-            ['role' => 'regional_official', 'name' => 'Responsable Régional', 'email' => 'regional@example.com', 'branch_id' => $rabat->id],
-            ['role' => 'local_official', 'name' => 'Responsable Local', 'email' => 'local@example.com', 'branch_id' => $rabatLocal->id],
-            ['role' => 'member', 'name' => 'Membre Actif', 'email' => 'member@example.com', 'branch_id' => $rabatLocal->id],
-            ['role' => 'volunteer', 'name' => 'Bénévole', 'email' => 'volunteer@example.com', 'branch_id' => $casaLocal->id],
-            ['role' => 'sympathizer', 'name' => 'Sympathisant', 'email' => 'sympathizer@example.com', 'branch_id' => $rabatLocal->id],
-            ['role' => 'visitor', 'name' => 'Visiteur Inscrit', 'email' => 'visitor@example.com', 'branch_id' => $casaLocal->id],
+            ['role' => 'super_admin', 'name' => 'Superviseur', 'email' => 'super_admin@gmail.com', 'branch_id' => $national->id],
+            ['role' => 'central_admin', 'name' => 'Administration Centrale', 'email' => 'central_admin@gmail.com', 'branch_id' => $national->id],
+            ['role' => 'regional_official', 'name' => 'Responsable Régional', 'email' => 'regional_official@gmail.com', 'branch_id' => $rabat->id],
+            ['role' => 'local_official', 'name' => 'Responsable Local', 'email' => 'local_official@gmail.com', 'branch_id' => $rabatLocal->id],
+            ['role' => 'member', 'name' => 'Membre', 'email' => 'member@gmail.com', 'branch_id' => $rabatLocal->id],
+            ['role' => 'volunteer', 'name' => 'Bénévole', 'email' => 'volunteer@gmail.com', 'branch_id' => $casaLocal->id],
+            ['role' => 'sympathizer', 'name' => 'Sympathisant', 'email' => 'sympathizer@gmail.com', 'branch_id' => $rabatLocal->id],
+            ['role' => 'visitor', 'name' => 'Visiteur', 'email' => 'visitor@gmail.com', 'branch_id' => $casaLocal->id],
         ];
 
         foreach ($accounts as $account) {
@@ -52,7 +51,7 @@ class AdminSeeder extends Seeder
                 ['email' => $account['email']],
                 [
                     'name' => $account['name'],
-                    'password' => Hash::make('password123'),
+                    'password' => Hash::make('password'),
                     'role_id' => $role->id,
                     'party_branch_id' => $account['branch_id'],
                     'is_active' => true,
@@ -60,6 +59,6 @@ class AdminSeeder extends Seeder
             );
         }
 
-        $this->command->info('Demo accounts created for all platform roles. Password: password123');
+        $this->command->info('Demo accounts created for all platform roles. Password: password');
     }
 }

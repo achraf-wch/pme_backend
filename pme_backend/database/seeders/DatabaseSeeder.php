@@ -45,76 +45,110 @@ class DatabaseSeeder extends Seeder
             ['name' => 'local_official', 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'regional_official', 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'central_admin', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'admin', 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'super_admin', 'created_at' => now(), 'updated_at' => now()],
         ];
         DB::table('roles')->insertOrIgnore($roles);
 
-        $adminRoleId    = DB::table('roles')->where('name', 'admin')->value('id');
-        $memberRoleId   = DB::table('roles')->where('name', 'member')->value('id');
-        $regionalRoleId = DB::table('roles')->where('name', 'regional_official')->value('id');
+        $legacyAdminRoleId = DB::table('roles')->where('name', 'admin')->value('id');
+        $centralAdminRoleId = DB::table('roles')->where('name', 'central_admin')->value('id');
+        if ($legacyAdminRoleId && $centralAdminRoleId) {
+            DB::table('users')->where('role_id', $legacyAdminRoleId)->update(['role_id' => $centralAdminRoleId]);
+            DB::table('roles')->where('id', $legacyAdminRoleId)->delete();
+        }
+
+        $roleIds = DB::table('roles')->pluck('id', 'name');
 
         // -------------------------------------------------------
         // 2. USERS
         // -------------------------------------------------------
         $users = [
             [
-                'name'       => 'Alice Admin',
-                'email'      => 'alice@example.com',
+                'name'       => 'Visiteur',
+                'email'      => 'visitor@gmail.com',
                 'password'   => Hash::make('password'),
-                'role_id'    => $adminRoleId,
-                'party_branch_id' => $nationalBranch->id,
+                'role_id'    => $roleIds['visitor'],
+                'party_branch_id' => $casaLocalBranch->id,
                 'is_active'  => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name'       => 'Bob Member',
-                'email'      => 'bob@example.com',
+                'name'       => 'Sympathisant',
+                'email'      => 'sympathizer@gmail.com',
                 'password'   => Hash::make('password'),
-                'role_id'    => $memberRoleId,
+                'role_id'    => $roleIds['sympathizer'],
                 'party_branch_id' => $rabatLocalBranch->id,
                 'is_active'  => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name'       => 'Clara Moderator',
-                'email'      => 'clara@example.com',
+                'name'       => 'Bénévole',
+                'email'      => 'volunteer@gmail.com',
                 'password'   => Hash::make('password'),
-                'role_id'    => $regionalRoleId,
+                'role_id'    => $roleIds['volunteer'],
+                'party_branch_id' => $casaLocalBranch->id,
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name'       => 'Membre',
+                'email'      => 'member@gmail.com',
+                'password'   => Hash::make('password'),
+                'role_id'    => $roleIds['member'],
+                'party_branch_id' => $rabatLocalBranch->id,
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name'       => 'Responsable Local',
+                'email'      => 'local_official@gmail.com',
+                'password'   => Hash::make('password'),
+                'role_id'    => $roleIds['local_official'],
+                'party_branch_id' => $rabatLocalBranch->id,
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name'       => 'Responsable Régional',
+                'email'      => 'regional_official@gmail.com',
+                'password'   => Hash::make('password'),
+                'role_id'    => $roleIds['regional_official'],
                 'party_branch_id' => $rabatBranch->id,
                 'is_active'  => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name'       => 'David Member',
-                'email'      => 'david@example.com',
+                'name'       => 'Administration Centrale',
+                'email'      => 'central_admin@gmail.com',
                 'password'   => Hash::make('password'),
-                'role_id'    => $memberRoleId,
-                'party_branch_id' => $casaLocalBranch->id,
+                'role_id'    => $roleIds['central_admin'],
+                'party_branch_id' => $nationalBranch->id,
                 'is_active'  => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name'       => 'Eva Inactive',
-                'email'      => 'eva@example.com',
+                'name'       => 'Superviseur',
+                'email'      => 'super_admin@gmail.com',
                 'password'   => Hash::make('password'),
-                'role_id'    => $memberRoleId,
-                'party_branch_id' => $casaLocalBranch->id,
-                'is_active'  => 0,
+                'role_id'    => $roleIds['super_admin'],
+                'party_branch_id' => $nationalBranch->id,
+                'is_active'  => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
         ];
         DB::table('users')->insert($users);
 
-        $alice  = DB::table('users')->where('email', 'alice@example.com')->value('id');
-        $bob    = DB::table('users')->where('email', 'bob@example.com')->value('id');
-        $clara  = DB::table('users')->where('email', 'clara@example.com')->value('id');
-        $david  = DB::table('users')->where('email', 'david@example.com')->value('id');
+        $alice  = DB::table('users')->where('email', 'central_admin@gmail.com')->value('id');
+        $bob    = DB::table('users')->where('email', 'member@gmail.com')->value('id');
+        $clara  = DB::table('users')->where('email', 'regional_official@gmail.com')->value('id');
+        $david  = DB::table('users')->where('email', 'visitor@gmail.com')->value('id');
 
         // -------------------------------------------------------
         // 3. AUDIT LOGS
@@ -209,8 +243,8 @@ class DatabaseSeeder extends Seeder
         // -------------------------------------------------------
         DB::table('donations')->insert([
             [
-                'name'              => 'Bob Member',
-                'email'             => 'bob@example.com',
+                'name'              => 'Membre',
+                'email'             => 'member@gmail.com',
                 'amount'            => 150.00,
                 'note'              => 'Monthly support donation',
                 'status'            => 'completed',
@@ -265,7 +299,7 @@ class DatabaseSeeder extends Seeder
                 'start_time'      => Carbon::now()->addDays(10)->setTime(9, 0),
                 'end_time'        => Carbon::now()->addDays(10)->setTime(17, 0),
                 'max_attendees'   => 200,
-                'audience'        => json_encode(['member', 'regional_official', 'central_admin', 'admin']),
+                'audience'        => json_encode(['member', 'regional_official', 'central_admin']),
                 'attachment_path' => null,
                 'created_by'      => $alice,
                 'party_branch_id' => $nationalBranch->id,
@@ -325,6 +359,7 @@ class DatabaseSeeder extends Seeder
                 'file_url'    => 'https://storage.example.com/media/banner_home.jpg',
                 'file_type'   => 'image/jpeg',
                 'file_size'   => 204800,
+                'audience'    => json_encode(['public']),
                 'uploaded_by' => $alice,
                 'created_at'  => now(),
                 'updated_at'  => now(),
@@ -334,6 +369,7 @@ class DatabaseSeeder extends Seeder
                 'file_url'    => 'https://storage.example.com/media/annual_report_2025.pdf',
                 'file_type'   => 'application/pdf',
                 'file_size'   => 1048576,
+                'audience'    => json_encode(['member', 'central_admin']),
                 'uploaded_by' => $alice,
                 'created_at'  => now(),
                 'updated_at'  => now(),
@@ -343,6 +379,7 @@ class DatabaseSeeder extends Seeder
                 'file_url'    => 'https://storage.example.com/media/volunteer_day_photo.png',
                 'file_type'   => 'image/png',
                 'file_size'   => 512000,
+                'audience'    => json_encode(['volunteer', 'sympathizer', 'member']),
                 'uploaded_by' => $clara,
                 'created_at'  => now(),
                 'updated_at'  => now(),
@@ -372,7 +409,7 @@ class DatabaseSeeder extends Seeder
                 'updated_at'  => now()->subDays(3),
             ],
             [
-                'user_id'     => DB::table('users')->where('email', 'eva@example.com')->value('id'),
+                'user_id'     => DB::table('users')->where('email', 'volunteer@gmail.com')->value('id'),
                 'status'      => 'rejected',
                 'motivation'  => 'Looking for networking opportunities.',
                 'reviewed_by' => $clara,
@@ -428,7 +465,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'newsletter1@mail.com', 'created_at' => now(), 'updated_at' => now()],
             ['email' => 'newsletter2@mail.com', 'created_at' => now(), 'updated_at' => now()],
             ['email' => 'newsletter3@mail.com', 'created_at' => now(), 'updated_at' => now()],
-            ['email' => 'bob@example.com',      'created_at' => now(), 'updated_at' => now()],
+            ['email' => 'member@gmail.com',     'created_at' => now(), 'updated_at' => now()],
             ['email' => 'fatima.zahra@mail.com','created_at' => now(), 'updated_at' => now()],
         ]);
 
@@ -527,35 +564,69 @@ class DatabaseSeeder extends Seeder
         // -------------------------------------------------------
         // 16. STATIC PAGES
         // -------------------------------------------------------
-        DB::table('static_pages')->insert([
+        foreach ([
             [
                 'slug'             => 'about-us',
-                'title'            => 'About Us',
-                'content'          => '<h1>About Our Organization</h1><p>We are a non-profit dedicated to empowering communities through education, civic engagement, and solidarity. Founded in 2015, we have served thousands of people across the country.</p>',
+                'title'            => 'About Us | من نحن',
+                'content'          => '<h1>About Our Organization</h1><p>Parti du Maroc Émergent is a civic political organization focused on training, innovation, solidarity, and responsible public participation.</p>',
                 'meta_title'       => 'About Us – Our Mission & Vision',
-                'meta_description' => 'Learn about our organization, our mission, and how we are making a difference in communities.',
-                'created_at'       => now(),
-                'updated_at'       => now(),
+                'meta_description' => 'Learn about the party, its mission, and its civic engagement.',
+            ],
+            [
+                'slug'             => 'vision-mission',
+                'title'            => 'Vision et Mission | الرؤية والرسالة',
+                'content'          => '<h1>الرؤية والرسالة</h1><p>رؤيتنا هي بناء ممارسة سياسية حديثة، شفافة، قريبة من المواطن، قائمة على التكوين والابتكار والذكاء الجماعي. رسالتنا هي تحويل هذه الرؤية إلى برامج قابلة للتنفيذ داخل المؤسسات والمجتمع.</p>',
+                'meta_title'       => 'Vision et Mission',
+                'meta_description' => 'The party vision, mission, and institutional values.',
+            ],
+            [
+                'slug'             => 'leadership-structures',
+                'title'            => 'Leadership et Structures | القيادة والهياكل',
+                'content'          => '<h1>القيادة والهياكل</h1><p>تعرض هذه الصفحة القيادة الوطنية والهياكل الجهوية والمحلية ولجان العمل الموضوعاتية، مع قابلية التحيين من لوحة الإدارة.</p>',
+                'meta_title'       => 'Leadership et Structures',
+                'meta_description' => 'National, regional, local, and thematic party structures.',
+            ],
+            [
+                'slug'             => 'social-project',
+                'title'            => 'Projet Sociétal | المشروع المجتمعي',
+                'content'          => '<h1>برنامج الحزب ومشروعه المجتمعي</h1><p>يركز المشروع المجتمعي على التكوين، التشغيل، التحول الرقمي، العدالة الاجتماعية، مشاركة الشباب، والفعالية المؤسساتية.</p>',
+                'meta_title'       => 'Projet Sociétal du PME',
+                'meta_description' => 'Political program and social project priorities.',
             ],
             [
                 'slug'             => 'privacy-policy',
-                'title'            => 'Privacy Policy',
-                'content'          => '<h1>Privacy Policy</h1><p>We respect your privacy. This page describes how we collect, use, and protect your personal data in compliance with applicable laws.</p>',
+                'title'            => 'Privacy Policy | سياسة الخصوصية',
+                'content'          => '<h1>Privacy Policy</h1><p>We respect your privacy. This page describes how we collect, use, and protect personal data in compliance with applicable laws.</p>',
                 'meta_title'       => 'Privacy Policy',
-                'meta_description' => 'Read our privacy policy to understand how we handle your personal information.',
-                'created_at'       => now(),
-                'updated_at'       => now(),
+                'meta_description' => 'Read how personal information is handled.',
+            ],
+            [
+                'slug'             => 'terms-of-use',
+                'title'            => 'Terms of Use | شروط الاستعمال',
+                'content'          => '<h1>Terms of Use</h1><p>These terms define the rules for using the public site, member space, event registration, donations, and digital services.</p>',
+                'meta_title'       => 'Terms of Use',
+                'meta_description' => 'Rules and conditions for using the platform.',
+            ],
+            [
+                'slug'             => 'accessibility',
+                'title'            => 'Accessibility | الولوجية',
+                'content'          => '<h1>Accessibility</h1><p>The platform is designed to support accessible navigation, readable content, keyboard use, and inclusive access to public information.</p>',
+                'meta_title'       => 'Accessibility',
+                'meta_description' => 'Accessibility statement for the public website.',
             ],
             [
                 'slug'             => 'faq',
-                'title'            => 'Frequently Asked Questions',
-                'content'          => '<h1>FAQ</h1><p>Find answers to the most common questions about membership, donations, events, and more.</p>',
+                'title'            => 'Frequently Asked Questions | الأسئلة الشائعة',
+                'content'          => '<h1>FAQ</h1><p>Find answers about membership, sympathizer requests, volunteering, donations, events, voting eligibility, and account access.</p>',
                 'meta_title'       => 'FAQ – Common Questions Answered',
-                'meta_description' => 'Browse our frequently asked questions to quickly find the information you need.',
-                'created_at'       => now(),
-                'updated_at'       => now(),
+                'meta_description' => 'Common questions about membership, donations, events, and voting.',
             ],
-        ]);
+        ] as $page) {
+            DB::table('static_pages')->updateOrInsert(
+                ['slug' => $page['slug']],
+                array_merge($page, ['created_at' => now(), 'updated_at' => now()])
+            );
+        }
 
         // -------------------------------------------------------
         // 17. SYMPATHIZERS
