@@ -11,6 +11,7 @@ return new class extends Migration {
             $table->string('file_url');
             $table->string('file_type')->nullable();
             $table->integer('file_size')->nullable();
+            $table->json('audience')->nullable();
             $table->foreignId('uploaded_by')->constrained('users');
             $table->timestamps();
         });
