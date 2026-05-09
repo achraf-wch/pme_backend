@@ -7,7 +7,7 @@ class Donation extends Model
 {
     protected $fillable = [
         'name', 'email', 'amount', 'note',
-        'status', 'payment_reference', 'user_id'
+        'frequency', 'status', 'payment_reference', 'user_id'
     ];
 
     public function user()
