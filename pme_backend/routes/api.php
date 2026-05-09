@@ -18,6 +18,8 @@ use App\Http\Controllers\SympathizerController;
 use App\Http\Controllers\VolunteerController;
 use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\SearchController;
+use App\Http\Controllers\AuditLogController;
 
 // ─────────────────────────────────────────
 // PUBLIC ROUTES
@@ -31,11 +33,13 @@ Route::get('/events/feed', [EventController::class, 'feed']);
 Route::get('/polls/feed',  [PollController::class, 'feed']);
 
 // Public content (still needed for admin/other)
-Route::get('/news',              [NewsController::class,  'index']);
+Route::get('/news',              [NewsController::class,  'feed']);
 Route::get('/news/{news}',       [NewsController::class,  'show']);
-Route::get('/events',            [EventController::class, 'index']);
+Route::get('/events',            [EventController::class, 'feed']);
 Route::get('/events/{id}',       [EventController::class, 'show']);
 Route::get('/static-pages/{slug}', [StaticPageController::class, 'show']);
+Route::get('/media',             [MediaController::class, 'index']);
+Route::get('/search', SearchController::class);
 
 // Public forms
 Route::post('/contact',              [ContactController::class,     'store']);
@@ -62,7 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────
     // MEMBER or ADMIN
     // ─────────────────────────────────────────
-    Route::middleware('role:visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,admin,super_admin')->group(function () {
+    Route::middleware('role:visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin')->group(function () {
 
         // Profile
         Route::get('/profile', [ProfileController::class, 'show']);
@@ -81,16 +85,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // LOCAL / REGIONAL OFFICIALS
     // الاطلاع على المعطيات المخول لها وإدارة بعض الأنشطة والتقارير الجزئية
     // ─────────────────────────────────────────
-    Route::middleware('role:local_official,regional_official,central_admin,admin,super_admin')->group(function () {
+    Route::middleware('role:local_official,regional_official,central_admin,super_admin')->group(function () {
         Route::get('/admin/stats', [StatsController::class, 'index']);
         Route::get('/admin/branches', [BranchController::class, 'index']);
+        Route::get('/admin/events', [EventController::class, 'index']);
 
         Route::post('/events',                   [EventController::class, 'store']);
         Route::put('/events/{id}',               [EventController::class, 'update']);
         Route::delete('/events/{id}',            [EventController::class, 'destroy']);
         Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
 
-        Route::get('/media',            [MediaController::class, 'index']);
         Route::post('/media',           [MediaController::class, 'store']);
         Route::delete('/media/{media}', [MediaController::class, 'destroy']);
     });
@@ -99,7 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // CENTRAL ADMINISTRATION
     // إدارة المحتوى والعضوية والتبرعات والتصويتات واستخراج التقارير
     // ─────────────────────────────────────────
-    Route::middleware('role:central_admin,admin,super_admin')->group(function () {
+    Route::middleware('role:central_admin,super_admin')->group(function () {
 
         // ── Membership requests ──
         Route::get('/admin/membership-requests',              [MembershipRequestController::class, 'indexPending']);
@@ -133,6 +137,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/donations/{donation}', [DonationController::class, 'destroy']);
 
         // ── News ──
+        Route::get('/admin/news', [NewsController::class, 'index']);
         Route::post('/news',          [NewsController::class, 'store']);
         Route::put('/news/{news}',    [NewsController::class, 'update']);
         Route::delete('/news/{news}', [NewsController::class, 'destroy']);
@@ -155,6 +160,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/newsletter',          [NewsletterController::class, 'index']);
         Route::delete('/admin/newsletter/{id}',  [NewsletterController::class, 'destroy']);
         Route::post('/admin/newsletter/send',    [NewsletterController::class, 'send']);
+
+        // ── Sensitive technical audit logs ──
+        Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
 
     });
 
