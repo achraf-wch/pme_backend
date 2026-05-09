@@ -11,9 +11,29 @@ class NewsController extends Controller
     /**
      * Admin: all news regardless of audience.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(News::with('author')->latest()->get());
+        $data = $request->validate([
+            'q' => 'nullable|string|max:120',
+            'type' => 'nullable|string|max:40',
+            'topic' => 'nullable|string|max:255',
+            'region' => 'nullable|string|max:255',
+            'archived' => 'nullable|boolean',
+        ]);
+
+        $news = News::with('author')
+            ->when($data['q'] ?? null, function ($query, $q) {
+                $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+                $query->where(fn ($sub) => $sub->where('title', 'like', $like)->orWhere('content', 'like', $like));
+            })
+            ->when($data['type'] ?? null, fn ($query, $type) => $query->where('type', $type))
+            ->when($data['topic'] ?? null, fn ($query, $topic) => $query->where('topic', $topic))
+            ->when($data['region'] ?? null, fn ($query, $region) => $query->where('region', $region))
+            ->when(($data['archived'] ?? false), fn ($query) => $query->whereNotNull('archived_at'), fn ($query) => $query->whereNull('archived_at'))
+            ->latest()
+            ->get();
+
+        return response()->json($news);
     }
 
     /**
@@ -26,10 +46,13 @@ class NewsController extends Controller
      */
     public function feed(Request $request)
     {
-        $role = optional($request->user()?->role)->name;
+        $user = $request->user('sanctum') ?: $request->user();
+        $role = optional($user?->loadMissing('role')->role)->name;
 
         $news = News::with('author')
             ->where('is_published', true)
+            ->whereNull('archived_at')
+            ->where('published_at', '<=', now())
             ->visibleTo($role)
             ->latest()
             ->get();
@@ -44,25 +67,34 @@ class NewsController extends Controller
     {
         $data = $request->validate([
             'title'        => 'required|string|max:255',
+            'type'         => 'nullable|string|in:news,communique,article',
+            'topic'        => 'nullable|string|max:255',
+            'region'       => 'nullable|string|max:255',
             'content'      => 'required|string',
             'is_published' => 'nullable',
+            'published_at' => 'nullable|date',
             'audience'     => 'required|array|min:1',
-            'audience.*'   => 'string|in:public,visitor,sympathizer,member,admin,local_official,central_admin,super_admin',
+            'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
         ]);
 
         $data['author_id']    = auth()->id();
         $data['is_published'] = filter_var($request->input('is_published'), FILTER_VALIDATE_BOOLEAN);
 
         if ($data['is_published']) {
-            $data['published_at'] = now();
+            $data['published_at'] = $data['published_at'] ?? now();
         }
+        $data['type'] = $data['type'] ?? 'news';
 
         if ($request->hasFile('image')) {
             $data['image_path'] = $request->file('image')->store('news', 'public');
         }
+        if ($request->hasFile('attachment')) {
+            $data['attachment_path'] = $request->file('attachment')->store('news/attachments', 'public');
+        }
 
-        unset($data['image']);
+        unset($data['image'], $data['attachment']);
 
         $news = News::create($data);
 
@@ -78,11 +110,17 @@ class NewsController extends Controller
 
         $data = $request->validate([
             'title'        => 'sometimes|required|string|max:255',
+            'type'         => 'nullable|string|in:news,communique,article',
+            'topic'        => 'nullable|string|max:255',
+            'region'       => 'nullable|string|max:255',
             'content'      => 'sometimes|required|string',
             'is_published' => 'nullable',
+            'published_at' => 'nullable|date',
+            'archived_at'  => 'nullable|date',
             'audience'     => 'sometimes|required|array|min:1',
-            'audience.*'   => 'string|in:public,visitor,sympathizer,member,admin,local_official,central_admin,super_admin',
+            'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
         ]);
 
         if (isset($data['is_published'])) {
@@ -98,8 +136,14 @@ class NewsController extends Controller
             }
             $data['image_path'] = $request->file('image')->store('news', 'public');
         }
+        if ($request->hasFile('attachment')) {
+            if ($newsItem->attachment_path) {
+                Storage::disk('public')->delete($newsItem->attachment_path);
+            }
+            $data['attachment_path'] = $request->file('attachment')->store('news/attachments', 'public');
+        }
 
-        unset($data['image']);
+        unset($data['image'], $data['attachment']);
         $newsItem->update($data);
 
         return response()->json($newsItem->load('author'));
@@ -114,6 +158,9 @@ class NewsController extends Controller
 
         if ($news->image_path) {
             Storage::disk('public')->delete($news->image_path);
+        }
+        if ($news->attachment_path) {
+            Storage::disk('public')->delete($news->attachment_path);
         }
 
         $news->delete();

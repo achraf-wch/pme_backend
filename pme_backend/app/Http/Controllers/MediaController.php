@@ -3,9 +3,27 @@ namespace App\Http\Controllers;
 use App\Models\Media;
 use Illuminate\Http\Request;
 class MediaController extends Controller {
-    public function index() { return response()->json(Media::with('uploader')->latest()->get()); }
+    public function index(Request $request) {
+        $user = $request->user('sanctum') ?: $request->user();
+        $role = optional($user?->loadMissing('role')->role)->name;
+        $adminRoles = ['local_official', 'regional_official', 'central_admin', 'super_admin'];
+
+        $query = Media::with('uploader')->latest();
+
+        if ($request->query('audience') === 'mine' || !in_array($role, $adminRoles, true)) {
+            $query->visibleTo($role);
+        }
+
+        return response()->json($query->get());
+    }
+
     public function store(Request $request) {
-        $request->validate(['file' => 'required|image|max:2048']);
+        $data = $request->validate([
+            'file' => 'required|file|mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx|max:10240',
+            'audience' => 'required|array|min:1',
+            'audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
+        ]);
+
         $path = $request->file('file')->store('media', 'public');
         $media = Media::create([
             'file_name' => $request->file('file')->getClientOriginalName(),
@@ -13,6 +31,7 @@ class MediaController extends Controller {
             'file_type' => $request->file('file')->getMimeType(),
             'file_size' => $request->file('file')->getSize(),
             'uploaded_by' => auth()->id(),
+            'audience' => $data['audience'],
         ]);
         return response()->json($media, 201);
     }

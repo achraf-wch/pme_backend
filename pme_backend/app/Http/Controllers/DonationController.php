@@ -36,6 +36,7 @@ class DonationController extends Controller
         }
 
         $data['status'] = 'pending';
+        $data['frequency'] = $data['frequency'] ?? 'once';
         $data['payment_reference'] = 'DON-' . now()->format('Ymd') . '-' . Str::upper(Str::random(8));
 
         if ($request->user()) {

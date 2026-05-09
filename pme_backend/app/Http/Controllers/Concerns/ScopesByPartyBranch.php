@@ -17,7 +17,7 @@ trait ScopesByPartyBranch
     {
         $role = $this->roleName($user);
 
-        if (in_array($role, ['central_admin', 'admin', 'super_admin'], true)) {
+        if (in_array($role, ['central_admin', 'super_admin'], true)) {
             return null;
         }
 
@@ -52,7 +52,7 @@ trait ScopesByPartyBranch
     {
         $role = $this->roleName($user);
 
-        if (in_array($role, ['central_admin', 'admin', 'super_admin'], true)) {
+        if (in_array($role, ['central_admin', 'super_admin'], true)) {
             return $requestedBranchId ? (int) $requestedBranchId : $user->party_branch_id;
         }
 

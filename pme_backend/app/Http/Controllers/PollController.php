@@ -34,7 +34,7 @@ class PollController extends Controller
      */
     public function feed(Request $request)
     {
-        $user = $request->user()?->load('role');
+        $user = ($request->user('sanctum') ?: $request->user())?->load('role');
         $role = optional($user?->role)->name;
         $now  = now();
 
@@ -65,6 +65,7 @@ class PollController extends Controller
         $polls = Poll::with('options')
             ->where('start_date', '<=', $now)
             ->where('end_date', '>=', $now)
+            ->visibleTo(optional($user->role)->name)
             ->get()
             ->filter(fn($poll) => $poll->userCanVote($user))
             ->map(function ($poll) use ($user) {
@@ -89,7 +90,7 @@ class PollController extends Controller
             'start_date'        => 'required|date',
             'end_date'          => 'required|date|after:start_date',
             'target_audience'   => 'required|array|min:1',
-            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'is_secret'         => 'nullable|boolean',
             'options'           => 'required|array|min:2',
             'options.*'         => 'required|string',
@@ -185,7 +186,7 @@ class PollController extends Controller
             'start_date'        => 'sometimes|required|date',
             'end_date'          => 'sometimes|required|date|after:start_date',
             'target_audience'   => 'sometimes|required|array|min:1',
-            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'is_secret'         => 'nullable|boolean',
             'options'           => 'sometimes|required|array|min:2',
             'options.*'         => 'required|string',

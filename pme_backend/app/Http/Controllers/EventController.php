@@ -36,7 +36,8 @@ class EventController extends Controller
      */
     public function feed(Request $request)
     {
-        $role = optional($request->user()?->role)->name;
+        $user = $request->user('sanctum') ?: $request->user();
+        $role = optional($user?->loadMissing('role')->role)->name;
 
         $events = Event::with('creator')
             ->visibleTo($role)
@@ -64,7 +65,7 @@ class EventController extends Controller
             'end_time'      => 'required|date|after:start_time',
             'max_attendees' => 'nullable|integer|min:1',
             'audience'      => 'required|array|min:1',
-            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'party_branch_id' => 'nullable|exists:party_branches,id',
             'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
         ]);
@@ -100,7 +101,7 @@ class EventController extends Controller
             'end_time'      => 'sometimes|required|date|after:start_time',
             'max_attendees' => 'nullable|integer|min:1',
             'audience'      => 'sometimes|required|array|min:1',
-            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,admin,local_official,regional_official,central_admin,super_admin',
+            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
             'party_branch_id' => 'nullable|exists:party_branches,id',
             'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
         ]);

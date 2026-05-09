@@ -108,7 +108,7 @@ class MembershipRequestController extends Controller
     {
         $role = Auth::user()->loadMissing('role')->role?->name;
 
-        if (!in_array($role, ['central_admin', 'admin', 'super_admin'], true)) {
+        if (!in_array($role, ['central_admin', 'super_admin'], true)) {
             abort(403, 'Unauthorized. Admin access required.');
         }
     }
