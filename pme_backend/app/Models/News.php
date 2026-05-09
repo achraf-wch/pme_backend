@@ -8,17 +8,23 @@ class News extends Model
 {
     protected $fillable = [
         'title',
+        'type',
+        'topic',
+        'region',
         'content',
         'is_published',
         'published_at',
+        'archived_at',
         'author_id',
         'image_path',
+        'attachment_path',
         'audience',
     ];
 
     protected $casts = [
         'is_published' => 'boolean',
         'published_at' => 'datetime',
+        'archived_at'  => 'datetime',
         'audience'     => 'array',
     ];
 

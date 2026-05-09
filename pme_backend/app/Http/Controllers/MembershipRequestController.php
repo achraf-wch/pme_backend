@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\MembershipRequest;
 use App\Models\User;
 use App\Models\Role;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class MembershipRequestController extends Controller
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     // 1. Visitor submits a request to become a member
     public function store(Request $request)
     {
@@ -37,6 +42,16 @@ class MembershipRequestController extends Controller
             'motivation' => $request->motivation,
             'status' => 'pending',
         ]);
+
+        $this->notifications->notifyAdmins([
+            'category' => 'membership',
+            'title' => 'Nouvelle demande d’adhésion',
+            'body' => "{$user->name} souhaite devenir membre.",
+            'action_url' => '/admin/dashboard',
+            'action_label' => 'Examiner la demande',
+            'source_type' => 'membership_request',
+            'source_id' => $membershipRequest->id,
+        ], $user->id);
 
         return response()->json([
             'message' => 'Membership request submitted. An admin will review it.',

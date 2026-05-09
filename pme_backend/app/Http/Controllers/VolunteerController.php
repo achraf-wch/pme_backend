@@ -2,10 +2,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Volunteer;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 class VolunteerController extends Controller
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -16,7 +21,16 @@ class VolunteerController extends Controller
             'skills'     => 'nullable|string',
             'motivation' => 'nullable|string',
         ]);
-        Volunteer::create($data);
+        $volunteer = Volunteer::create($data);
+        $this->notifications->notifyAdmins([
+            'category' => 'request',
+            'title' => 'Nouvelle demande bénévole',
+            'body' => "{$volunteer->name} souhaite participer comme bénévole.",
+            'action_url' => '/admin/volunteers',
+            'action_label' => 'Voir les demandes',
+            'source_type' => 'volunteer',
+            'source_id' => $volunteer->id,
+        ]);
         return response()->json(['message' => 'Volunteer request submitted'], 201);
     }
 

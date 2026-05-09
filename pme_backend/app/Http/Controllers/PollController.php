@@ -8,10 +8,15 @@ use App\Models\Vote;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Concerns\RecordsAuditLogs;
+use App\Services\NotificationService;
 
 class PollController extends Controller
 {
     use RecordsAuditLogs;
+
+    public function __construct(private NotificationService $notifications)
+    {
+    }
 
     /**
      * Admin: list all polls.
@@ -115,6 +120,16 @@ class PollController extends Controller
         }
 
         $this->audit($request, 'poll.created', $poll, ['target_audience' => $poll->target_audience]);
+
+        $this->notifications->notifyAudience($poll->target_audience ?? ['public'], [
+            'category' => 'poll',
+            'title' => 'Nouveau vote ouvert',
+            'body' => $poll->title,
+            'action_url' => '/member/active-polls',
+            'action_label' => 'Participer',
+            'source_type' => 'poll',
+            'source_id' => $poll->id,
+        ], Auth::id());
 
         return response()->json($poll->load('options'), 201);
     }

@@ -20,6 +20,7 @@ use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\NotificationController;
 
 // ─────────────────────────────────────────
 // PUBLIC ROUTES
@@ -56,6 +57,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
+
+    // Dashboard notifications
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/summary', [NotificationController::class, 'summary']);
+    Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::put('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 
     // Membership request (any authenticated user)
     Route::post('/membership-request', [MembershipRequestController::class, 'store']);

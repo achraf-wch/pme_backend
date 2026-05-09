@@ -2,11 +2,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -20,6 +25,16 @@ class AuthController extends Controller
 
         $user  = User::create($data);
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->notifications->notifyAdmins([
+            'category' => 'registration',
+            'title' => 'Nouvelle inscription',
+            'body' => "{$user->name} vient de créer un compte.",
+            'action_url' => '/admin/members',
+            'action_label' => 'Voir les utilisateurs',
+            'source_type' => 'user',
+            'source_id' => $user->id,
+        ]);
 
         return response()->json([
             'token' => $token,

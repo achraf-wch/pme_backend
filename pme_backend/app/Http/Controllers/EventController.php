@@ -5,12 +5,17 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\EventRegistration;
 use App\Http\Controllers\Concerns\ScopesByPartyBranch;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class EventController extends Controller
 {
     use ScopesByPartyBranch;
+
+    public function __construct(private NotificationService $notifications)
+    {
+    }
 
     /**
      * Admin: all events regardless of audience.
@@ -81,6 +86,16 @@ class EventController extends Controller
         unset($data['attachment']);
 
         $event = Event::create($data);
+
+        $this->notifications->notifyAudience($event->audience ?? ['public'], [
+            'category' => 'event',
+            'title' => 'Nouvelle activité',
+            'body' => "{$event->title} - {$event->location}",
+            'action_url' => '/events',
+            'action_label' => 'Voir l’activité',
+            'source_type' => 'event',
+            'source_id' => $event->id,
+        ], $user->id);
 
         return response()->json($event->load(['creator', 'partyBranch']), 201);
     }
@@ -178,6 +193,16 @@ class EventController extends Controller
         EventRegistration::firstOrCreate([
             'event_id' => $event->id,
             'user_id'  => $user->id,
+        ]);
+
+        $this->notifications->notifyAdmins([
+            'category' => 'registration',
+            'title' => 'Nouvelle inscription à une activité',
+            'body' => "{$user->name} s’est inscrit à {$event->title}.",
+            'action_url' => '/admin/events',
+            'action_label' => 'Voir les inscriptions',
+            'source_type' => 'event_registration',
+            'source_id' => $event->id,
         ]);
 
         return response()->json(['message' => 'Registered']);

@@ -1,8 +1,11 @@
 <?php
 namespace App\Http\Controllers;
 use App\Models\Media;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 class MediaController extends Controller {
+    public function __construct(private NotificationService $notifications) {}
+
     public function index(Request $request) {
         $user = $request->user('sanctum') ?: $request->user();
         $role = optional($user?->loadMissing('role')->role)->name;
@@ -33,6 +36,15 @@ class MediaController extends Controller {
             'uploaded_by' => auth()->id(),
             'audience' => $data['audience'],
         ]);
+        $this->notifications->notifyAudience($media->audience ?? ['public'], [
+            'category' => 'media',
+            'title' => 'Nouveau média disponible',
+            'body' => $media->file_name,
+            'action_url' => '/media',
+            'action_label' => 'Ouvrir',
+            'source_type' => 'media',
+            'source_id' => $media->id,
+        ], auth()->id());
         return response()->json($media, 201);
     }
     public function destroy($id) { Media::findOrFail($id)->delete(); return response()->json(['message'=>'Deleted']); }

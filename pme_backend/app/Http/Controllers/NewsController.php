@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\News;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class NewsController extends Controller
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     /**
      * Admin: all news regardless of audience.
      */
@@ -97,6 +102,18 @@ class NewsController extends Controller
         unset($data['image'], $data['attachment']);
 
         $news = News::create($data);
+
+        if ($news->is_published) {
+            $this->notifications->notifyAudience($news->audience ?? ['public'], [
+                'category' => 'content',
+                'title' => 'Nouvelle actualité',
+                'body' => $news->title,
+                'action_url' => '/news',
+                'action_label' => 'Lire',
+                'source_type' => 'news',
+                'source_id' => $news->id,
+            ], auth()->id());
+        }
 
         return response()->json($news->load('author'), 201);
     }

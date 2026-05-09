@@ -3,12 +3,17 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\RecordsAuditLogs;
 use App\Models\Donation;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class DonationController extends Controller
 {
     use RecordsAuditLogs;
+
+    public function __construct(private NotificationService $notifications)
+    {
+    }
 
     public function index()
     {
@@ -48,6 +53,16 @@ class DonationController extends Controller
             'amount' => $donation->amount,
             'status' => $donation->status,
         ]);
+
+        $this->notifications->notifyAdmins([
+            'category' => 'donation',
+            'title' => 'Nouvelle contribution',
+            'body' => "{$donation->name} a proposé une contribution de {$donation->amount}.",
+            'action_url' => '/admin/donations',
+            'action_label' => 'Voir les dons',
+            'source_type' => 'donation',
+            'source_id' => $donation->id,
+        ], $request->user()?->id);
 
         return response()->json($donation, 201);
     }

@@ -2,10 +2,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Sympathizer;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 class SympathizerController extends Controller
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -15,7 +20,16 @@ class SympathizerController extends Controller
             'city'    => 'nullable|string|max:100',
             'message' => 'nullable|string',
         ]);
-        Sympathizer::create($data);
+        $sympathizer = Sympathizer::create($data);
+        $this->notifications->notifyAdmins([
+            'category' => 'request',
+            'title' => 'Nouvelle demande sympathisant',
+            'body' => "{$sympathizer->name} souhaite rejoindre les sympathisants.",
+            'action_url' => '/admin/sympathizers',
+            'action_label' => 'Voir les demandes',
+            'source_type' => 'sympathizer',
+            'source_id' => $sympathizer->id,
+        ]);
         return response()->json(['message' => 'Request submitted'], 201);
     }
 
