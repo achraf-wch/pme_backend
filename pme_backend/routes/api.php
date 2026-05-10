@@ -25,8 +25,8 @@ use App\Http\Controllers\NotificationController;
 // ─────────────────────────────────────────
 // PUBLIC ROUTES
 // ─────────────────────────────────────────
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
+Route::post('/login',    [AuthController::class, 'login'])->middleware('throttle:auth-login');
 
 // ADD THESE THREE LINES FOR PUBLIC FEEDS
 Route::get('/news/feed',   [NewsController::class, 'feed']);
@@ -43,11 +43,13 @@ Route::get('/media',             [MediaController::class, 'index']);
 Route::get('/search', SearchController::class);
 
 // Public forms
-Route::post('/contact',              [ContactController::class,     'store']);
-Route::post('/donations',            [DonationController::class,    'store']);
-Route::post('/newsletter/subscribe', [NewsletterController::class,  'subscribe']);
-Route::post('/sympathizer-request',  [SympathizerController::class, 'store']);
-Route::post('/volunteer-request',    [VolunteerController::class,   'store']);
+Route::middleware('throttle:public-forms')->group(function () {
+    Route::post('/contact',              [ContactController::class,     'store']);
+    Route::post('/donations',            [DonationController::class,    'store']);
+    Route::post('/newsletter/subscribe', [NewsletterController::class,  'subscribe']);
+    Route::post('/sympathizer-request',  [SympathizerController::class, 'store']);
+    Route::post('/volunteer-request',    [VolunteerController::class,   'store']);
+});
 
 // ─────────────────────────────────────────
 // PROTECTED ROUTES
@@ -65,10 +67,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 
     // Membership request (any authenticated user)
-    Route::post('/membership-request', [MembershipRequestController::class, 'store']);
+    Route::post('/membership-request', [MembershipRequestController::class, 'store'])->middleware('throttle:membership-request');
 
     // Voting (controller handles audience check internally)
-    Route::post('/vote', [PollController::class, 'vote']);
+    Route::post('/vote', [PollController::class, 'vote'])->middleware('throttle:vote');
 
     // ─────────────────────────────────────────
     // MEMBER or ADMIN
@@ -82,7 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Member data
         Route::get('/my-donations',          [DonationController::class, 'myDonations']);
         Route::get('/my-events',             [EventController::class,    'myRegistrations']);
-        Route::post('/events/{id}/register', [EventController::class,    'register']);
+        Route::post('/events/{id}/register', [EventController::class,    'register'])->middleware('throttle:event-registration');
 
         // Active polls
         Route::get('/polls/active', [PollController::class, 'active']);
@@ -99,7 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/branches', [BranchController::class, 'index']);
         Route::get('/admin/events', [EventController::class, 'index']);
 
-        Route::post('/events',                   [EventController::class, 'store']);
+        Route::post('/events',                   [EventController::class, 'store'])->middleware('throttle:content-write');
         Route::put('/events/{id}',               [EventController::class, 'update']);
         Route::delete('/events/{id}',            [EventController::class, 'destroy']);
         Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
@@ -136,7 +138,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // ── Polls ──
         Route::get('/polls',              [PollController::class, 'index']);
-        Route::post('/polls',             [PollController::class, 'store']);
+        Route::post('/polls',             [PollController::class, 'store'])->middleware('throttle:content-write');
         Route::put('/polls/{id}',         [PollController::class, 'update']);
         Route::delete('/polls/{id}',      [PollController::class, 'destroy']);
         Route::get('/polls/{id}/results', [PollController::class, 'results']);
@@ -148,7 +150,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // ── News ──
         Route::get('/admin/news', [NewsController::class, 'index']);
-        Route::post('/news',          [NewsController::class, 'store']);
+        Route::post('/news',          [NewsController::class, 'store'])->middleware('throttle:content-write');
         Route::put('/news/{news}',    [NewsController::class, 'update']);
         Route::delete('/news/{news}', [NewsController::class, 'destroy']);
 
