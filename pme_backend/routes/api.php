@@ -86,6 +86,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Active polls
         Route::get('/polls/active', [PollController::class, 'active']);
+        Route::get('/my-news', [NewsController::class, 'mine']);
+        Route::get('/my-news/{news}', [NewsController::class, 'showMine']);
     });
 
     // ─────────────────────────────────────────
@@ -101,6 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/events/{id}',               [EventController::class, 'update']);
         Route::delete('/events/{id}',            [EventController::class, 'destroy']);
         Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
+        Route::post('/events/{id}/recaps',       [EventController::class, 'storeRecap']);
 
         Route::post('/media',           [MediaController::class, 'store']);
         Route::delete('/media/{media}', [MediaController::class, 'destroy']);

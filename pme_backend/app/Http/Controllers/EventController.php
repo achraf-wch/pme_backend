@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\EventRecap;
 use App\Models\EventRegistration;
 use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 use App\Services\NotificationService;
@@ -22,7 +23,7 @@ class EventController extends Controller
      */
     public function index()
     {
-        $query = Event::with(['creator', 'partyBranch'])->latest();
+        $query = Event::with(['creator', 'partyBranch'])->withCount('recaps')->latest();
 
         if ($user = request()->user()) {
             $this->applyBranchScope($query, $user);
@@ -54,7 +55,14 @@ class EventController extends Controller
 
     public function show($id)
     {
-        return response()->json(Event::with(['creator', 'registrations'])->findOrFail($id));
+        $user = request()->user('sanctum') ?: request()->user();
+        $role = optional($user?->loadMissing('role')->role)->name;
+
+        $event = Event::with(['creator', 'partyBranch', 'recaps.creator'])
+            ->visibleTo($role)
+            ->findOrFail($id);
+
+        return response()->json($event);
     }
 
     /**
@@ -168,6 +176,48 @@ class EventController extends Controller
             ->get();
 
         return response()->json($registrations);
+    }
+
+    public function storeRecap(Request $request, $id)
+    {
+        $event = Event::findOrFail($id);
+        $this->ensureCanAccessEvent($request, $event);
+
+        if ($event->end_time && $event->end_time->isFuture()) {
+            return response()->json(['message' => 'Recaps can be added after the event has finished.'], 422);
+        }
+
+        $data = $request->validate([
+            'title' => 'required|string|max:255',
+            'content' => 'nullable|string',
+            'photos' => 'nullable|array|max:12',
+            'photos.*' => 'file|mimes:jpg,jpeg,png,gif,webp|max:5120',
+        ]);
+
+        $photos = [];
+        foreach ($request->file('photos', []) as $photo) {
+            $photos[] = $photo->store("events/{$event->id}/recaps", 'public');
+        }
+
+        $recap = EventRecap::create([
+            'event_id' => $event->id,
+            'created_by' => $request->user()->id,
+            'title' => $data['title'],
+            'content' => $data['content'] ?? null,
+            'photos' => $photos,
+        ]);
+
+        $this->notifications->notifyAudience($event->audience ?? ['public'], [
+            'category' => 'event',
+            'title' => 'Nouveau récap d’activité',
+            'body' => $event->title,
+            'action_url' => "/events/{$event->id}",
+            'action_label' => 'Voir le récap',
+            'source_type' => 'event_recap',
+            'source_id' => $recap->id,
+        ], $request->user()->id);
+
+        return response()->json($recap->load('creator'), 201);
     }
 
     /**

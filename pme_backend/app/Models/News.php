@@ -39,7 +39,7 @@ class News extends Model
     public function scopeVisibleTo($query, ?string $role = null)
     {
         return $query->where(function ($q) use ($role) {
-            $q->whereJsonContains('audience', 'public');
+            $q->whereNull('audience')->orWhereJsonContains('audience', 'public');
             if ($role) {
                 $q->orWhereJsonContains('audience', $role);
             }

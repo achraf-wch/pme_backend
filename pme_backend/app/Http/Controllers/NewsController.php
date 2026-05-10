@@ -54,15 +54,71 @@ class NewsController extends Controller
         $user = $request->user('sanctum') ?: $request->user();
         $role = optional($user?->loadMissing('role')->role)->name;
 
+        return response()->json($this->visibleFeedForRole($role)->get());
+    }
+
+    public function mine(Request $request)
+    {
+        $role = optional($request->user()->loadMissing('role')->role)->name;
+
+        return response()->json($this->visibleFeedForRole($role)->get());
+    }
+
+    private function visibleFeedForRole(?string $role)
+    {
         $news = News::with('author')
             ->where('is_published', true)
             ->whereNull('archived_at')
-            ->where('published_at', '<=', now())
             ->visibleTo($role)
-            ->latest()
-            ->get();
+            ->latest();
 
-        return response()->json($news);
+        return $news;
+    }
+
+    private function booleanInput(Request $request, string $key, bool $default = false): bool
+    {
+        if (!$request->has($key)) {
+            return $default;
+        }
+
+        $value = $request->input($key);
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'on', 'yes'], true);
+    }
+
+    public function show(Request $request, News $news)
+    {
+        $user = $request->user('sanctum') ?: $request->user();
+        $role = optional($user?->loadMissing('role')->role)->name;
+
+        return $this->showForRole($news, $role);
+    }
+
+    public function showMine(Request $request, News $news)
+    {
+        $role = optional($request->user()->loadMissing('role')->role)->name;
+
+        return $this->showForRole($news, $role);
+    }
+
+    private function showForRole(News $news, ?string $role)
+    {
+        $visible = News::query()
+            ->whereKey($news->id)
+            ->where('is_published', true)
+            ->whereNull('archived_at')
+            ->visibleTo($role)
+            ->exists();
+
+        if (!$visible) {
+            abort(404);
+        }
+
+        return response()->json($news->load('author'));
     }
 
     /**
@@ -84,11 +140,11 @@ class NewsController extends Controller
             'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
         ]);
 
-        $data['author_id']    = auth()->id();
-        $data['is_published'] = filter_var($request->input('is_published'), FILTER_VALIDATE_BOOLEAN);
+        $data['author_id'] = auth()->id();
+        $data['is_published'] = $this->booleanInput($request, 'is_published', true);
 
         if ($data['is_published']) {
-            $data['published_at'] = $data['published_at'] ?? now();
+            $data['published_at'] = now();
         }
         $data['type'] = $data['type'] ?? 'news';
 
@@ -108,7 +164,7 @@ class NewsController extends Controller
                 'category' => 'content',
                 'title' => 'Nouvelle actualité',
                 'body' => $news->title,
-                'action_url' => '/news',
+                'action_url' => "/news/{$news->id}",
                 'action_label' => 'Lire',
                 'source_type' => 'news',
                 'source_id' => $news->id,
@@ -140,8 +196,8 @@ class NewsController extends Controller
             'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
         ]);
 
-        if (isset($data['is_published'])) {
-            $data['is_published'] = filter_var($request->input('is_published'), FILTER_VALIDATE_BOOLEAN);
+        if (array_key_exists('is_published', $data)) {
+            $data['is_published'] = $this->booleanInput($request, 'is_published');
             if ($data['is_published'] && !$newsItem->published_at) {
                 $data['published_at'] = now();
             }

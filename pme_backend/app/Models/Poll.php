@@ -55,7 +55,7 @@ class Poll extends Model
     public function scopeVisibleTo($query, ?string $role = null)
     {
         return $query->where(function ($q) use ($role) {
-            $q->whereJsonContains('target_audience', 'public');
+            $q->whereNull('target_audience')->orWhereJsonContains('target_audience', 'public');
             if ($role) {
                 $q->orWhereJsonContains('target_audience', $role);
             }
@@ -68,6 +68,6 @@ class Poll extends Model
     public function scopeActive($query)
     {
         $now = now();
-        return $query->where('start_date', '<=', $now)->where('end_date', '>=', $now);
+        return $query->where('end_date', '>=', $now);
     }
 }

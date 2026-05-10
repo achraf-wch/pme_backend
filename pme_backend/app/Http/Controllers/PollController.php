@@ -44,7 +44,6 @@ class PollController extends Controller
         $now  = now();
 
         $polls = Poll::with('options')
-            ->where('start_date', '<=', $now)
             ->where('end_date', '>=', $now)
             ->visibleTo($role)
             ->get()
@@ -68,12 +67,11 @@ class PollController extends Controller
         $now  = now();
 
         $polls = Poll::with('options')
-            ->where('start_date', '<=', $now)
             ->where('end_date', '>=', $now)
             ->visibleTo(optional($user->role)->name)
             ->get()
-            ->filter(fn($poll) => $poll->userCanVote($user))
             ->map(function ($poll) use ($user) {
+                $poll->can_vote = $poll->userCanVote($user);
                 $poll->has_voted = Vote::where('poll_id', $poll->id)
                     ->where('user_id', $user->id)
                     ->exists();

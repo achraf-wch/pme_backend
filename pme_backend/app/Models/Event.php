@@ -40,13 +40,18 @@ class Event extends Model
         return $this->hasMany(EventRegistration::class);
     }
 
+    public function recaps()
+    {
+        return $this->hasMany(EventRecap::class)->latest();
+    }
+
     /**
      * Scope: only events visible to a given role (or public).
      */
     public function scopeVisibleTo($query, ?string $role = null)
     {
         return $query->where(function ($q) use ($role) {
-            $q->whereJsonContains('audience', 'public');
+            $q->whereNull('audience')->orWhereJsonContains('audience', 'public');
             if ($role) {
                 $q->orWhereJsonContains('audience', $role);
             }
