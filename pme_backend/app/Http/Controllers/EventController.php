@@ -7,8 +7,12 @@ use App\Models\EventRecap;
 use App\Models\EventRegistration;
 use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 use App\Services\NotificationService;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class EventController extends Controller
 {
@@ -26,7 +30,12 @@ class EventController extends Controller
         $query = Event::with(['creator', 'partyBranch'])->withCount('recaps')->latest();
 
         if ($user = request()->user()) {
-            $this->applyBranchScope($query, $user);
+            $role = $this->roleName($user);
+            if (in_array($role, ['local_official', 'regional_official'], true)) {
+                $query->where('party_branch_id', $user->party_branch_id);
+            } else {
+                $this->applyBranchScope($query, $user);
+            }
         }
 
         return response()->json($query->get());
@@ -46,7 +55,7 @@ class EventController extends Controller
         $role = optional($user?->loadMissing('role')->role)->name;
 
         $events = Event::with('creator')
-            ->visibleTo($role)
+            ->visibleTo($role, $user)
             ->latest('start_time')
             ->get();
 
@@ -59,7 +68,7 @@ class EventController extends Controller
         $role = optional($user?->loadMissing('role')->role)->name;
 
         $event = Event::with(['creator', 'partyBranch', 'recaps.creator'])
-            ->visibleTo($role)
+            ->visibleTo($role, $user)
             ->findOrFail($id);
 
         return response()->json($event);
@@ -84,26 +93,43 @@ class EventController extends Controller
         ]);
 
         $user = $request->user();
+        $this->ensureAudienceAllowedForWrite($user, $data['audience']);
+        $this->ensureCanManageBranch($user, $data['party_branch_id'] ?? null);
         $data['created_by'] = $user->id;
         $data['party_branch_id'] = $this->branchIdForWrite($user, $data['party_branch_id'] ?? null);
 
+        $attachmentPath = null;
+
         if ($request->hasFile('attachment')) {
-            $data['attachment_path'] = $request->file('attachment')->store('events', 'public');
+            $attachmentPath = $request->file('attachment')->store('events', 'public');
+            $data['attachment_path'] = $attachmentPath;
         }
 
         unset($data['attachment']);
 
-        $event = Event::create($data);
+        try {
+            $event = DB::transaction(function () use ($data, $user) {
+                $event = Event::create($data);
 
-        $this->notifications->notifyAudience($event->audience ?? ['public'], [
-            'category' => 'event',
-            'title' => 'Nouvelle activité',
-            'body' => "{$event->title} - {$event->location}",
-            'action_url' => '/events',
-            'action_label' => 'Voir l’activité',
-            'source_type' => 'event',
-            'source_id' => $event->id,
-        ], $user->id);
+                $this->notifications->notifyAudience($event->audience ?? ['public'], [
+                    'category' => 'event',
+                    'title' => 'Nouvelle activité',
+                    'body' => "{$event->title} - {$event->location}",
+                    'action_url' => '/events',
+                    'action_label' => 'Voir l’activité',
+                    'source_type' => 'event',
+                    'source_id' => $event->id,
+                ], $user->id);
+
+                return $event;
+            });
+        } catch (Throwable $exception) {
+            if ($attachmentPath) {
+                Storage::disk('public')->delete($attachmentPath);
+            }
+
+            throw $exception;
+        }
 
         return response()->json($event->load(['creator', 'partyBranch']), 201);
     }
@@ -129,6 +155,12 @@ class EventController extends Controller
             'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
         ]);
 
+        if (array_key_exists('audience', $data)) {
+            $this->ensureAudienceAllowedForWrite($request->user(), $data['audience']);
+        }
+        if (array_key_exists('party_branch_id', $data)) {
+            $this->ensureCanManageBranch($request->user(), $data['party_branch_id']);
+        }
         if (array_key_exists('party_branch_id', $data)) {
             $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id']);
         }
@@ -225,35 +257,66 @@ class EventController extends Controller
      */
     public function register(Request $request, $id)
     {
-        $user  = $request->user()->load('role');
-        $event = Event::findOrFail($id);
-        $role  = optional($user->role)->name;
+        try {
+            $result = DB::transaction(function () use ($request, $id) {
+                $user  = $request->user()->load('role');
+                $event = Event::whereKey($id)->lockForUpdate()->firstOrFail();
+                $role  = optional($user->role)->name;
 
-        // Check user's role is in the event audience
-        $audience = $event->audience ?? ['public'];
-        if (!in_array('public', $audience) && !in_array($role, $audience)) {
-            return response()->json(['message' => 'You are not allowed to register for this event'], 403);
+                // Check user's role is in the event audience
+                $audience = $event->audience ?? ['public'];
+                if (!in_array('public', $audience) && !in_array($role, $audience)) {
+                    throw new HttpResponseException(response()->json(['message' => 'You are not allowed to register for this event'], 403));
+                }
+
+                $branchIds = $this->branchIdsVisibleTo($user);
+                if ($event->party_branch_id && $branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
+                    throw new HttpResponseException(response()->json(['message' => 'This event is not open for your branch.'], 403));
+                }
+
+                $existingRegistration = EventRegistration::where('event_id', $event->id)
+                    ->where('user_id', $user->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existingRegistration) {
+                    return ['event' => $event, 'user' => $user, 'created' => false];
+                }
+
+                // Check capacity while holding the event row lock.
+                if ($event->max_attendees && $event->registrations()->count() >= $event->max_attendees) {
+                    throw new HttpResponseException(response()->json(['message' => 'Event is full'], 400));
+                }
+
+                EventRegistration::create([
+                    'event_id' => $event->id,
+                    'user_id'  => $user->id,
+                ]);
+
+                return ['event' => $event, 'user' => $user, 'created' => true];
+            });
+        } catch (QueryException $exception) {
+            if (in_array($exception->getCode(), ['23000', '23505'], true)) {
+                return response()->json(['message' => 'Registered']);
+            }
+
+            throw $exception;
         }
 
-        // Check capacity
-        if ($event->max_attendees && $event->registrations()->count() >= $event->max_attendees) {
-            return response()->json(['message' => 'Event is full'], 400);
+        if ($result['created']) {
+            $event = $result['event'];
+            $user = $result['user'];
+
+            $this->notifications->notifyAdmins([
+                'category' => 'registration',
+                'title' => 'Nouvelle inscription à une activité',
+                'body' => "{$user->name} s’est inscrit à {$event->title}.",
+                'action_url' => '/admin/events',
+                'action_label' => 'Voir les inscriptions',
+                'source_type' => 'event_registration',
+                'source_id' => $event->id,
+            ]);
         }
-
-        EventRegistration::firstOrCreate([
-            'event_id' => $event->id,
-            'user_id'  => $user->id,
-        ]);
-
-        $this->notifications->notifyAdmins([
-            'category' => 'registration',
-            'title' => 'Nouvelle inscription à une activité',
-            'body' => "{$user->name} s’est inscrit à {$event->title}.",
-            'action_url' => '/admin/events',
-            'action_label' => 'Voir les inscriptions',
-            'source_type' => 'event_registration',
-            'source_id' => $event->id,
-        ]);
 
         return response()->json(['message' => 'Registered']);
     }
@@ -272,9 +335,17 @@ class EventController extends Controller
 
     private function ensureCanAccessEvent(Request $request, Event $event): void
     {
+        $actor = $request->user();
+        $role = $this->roleName($actor);
+
+        if (in_array($role, ['local_official', 'regional_official'], true)
+            && (int) $event->party_branch_id !== (int) $actor->party_branch_id) {
+            abort(403, 'You are not allowed to manage this event.');
+        }
+
         $branchIds = $this->branchIdsVisibleTo($request->user());
 
-        if ($branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
+        if ($event->party_branch_id && $branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
             abort(403, 'You are not allowed to manage this event.');
         }
     }
