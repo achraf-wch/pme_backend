@@ -13,7 +13,10 @@ class MemberController extends Controller
     public function index()
     {
         $query = User::with(['role', 'partyBranch'])->latest();
-        $this->applyBranchScope($query, request()->user());
+        $branchIds = $this->userBranchIdsVisibleTo(request()->user());
+        if ($branchIds !== null) {
+            $query->whereIn('party_branch_id', $branchIds);
+        }
 
         return response()->json($query->get());
     }
@@ -21,7 +24,10 @@ class MemberController extends Controller
     public function show($id)
     {
         $query = User::with(['role', 'partyBranch'])->whereKey($id);
-        $this->applyBranchScope($query, request()->user());
+        $branchIds = $this->userBranchIdsVisibleTo(request()->user());
+        if ($branchIds !== null) {
+            $query->whereIn('party_branch_id', $branchIds);
+        }
 
         return response()->json($query->firstOrFail());
     }

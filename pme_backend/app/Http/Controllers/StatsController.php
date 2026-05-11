@@ -30,8 +30,28 @@ class StatsController extends Controller
             $votesCount = \App\Models\PollVote::count();
         }
 
-        // Helper to count users by role name
-        $countByRole = fn($name) => User::whereHas('role', fn($q) => $q->where('name', $name))->count();
+        $userQuery = User::query();
+        $visibleUserBranchIds = $this->userBranchIdsVisibleTo($user);
+        if ($visibleUserBranchIds !== null) {
+            $userQuery->whereIn('party_branch_id', $visibleUserBranchIds);
+        }
+
+        $newsQuery = News::query();
+        $membershipQuery = MembershipRequest::query();
+        if ($user) {
+            $this->applyBranchScope($newsQuery, $user);
+            $branchIds = $this->userBranchIdsVisibleTo($user);
+            if ($branchIds !== null) {
+                $membershipQuery->where(function ($query) use ($branchIds) {
+                    $query->whereIn('regional_branch_id', $branchIds)
+                        ->orWhereIn('local_branch_id', $branchIds)
+                        ->orWhereHas('user', fn ($userQuery) => $userQuery->whereIn('party_branch_id', $branchIds));
+                });
+            }
+        }
+
+        // Helper to count users by role name inside the visible branch scope.
+        $countByRole = fn($name) => (clone $userQuery)->whereHas('role', fn($q) => $q->where('name', $name))->count();
 
         $eventQuery = Event::query();
         if ($user) {
@@ -44,25 +64,46 @@ class StatsController extends Controller
                 'registrations' => EventRegistration::whereIn('event_id', (clone $eventQuery)->pluck('id'))->count(),
             ],
             'news' => [
-                'total'     => News::count(),
-                'published' => News::where('is_published', true)->count(),
+                'total'     => (clone $newsQuery)->count(),
+                'published' => (clone $newsQuery)->where('is_published', true)->count(),
             ],
         ];
 
         if (in_array($role, ['local_official', 'regional_official'], true)) {
             return response()->json([
                 ...$base,
+                'users' => [
+                    'total'        => (clone $userQuery)->count(),
+                    'members'      => $countByRole('member'),
+                    'sympathizers' => $countByRole('sympathizer'),
+                    'volunteers'   => $countByRole('volunteer'),
+                    'local_officials' => $countByRole('local_official'),
+                    'regional_officials' => $countByRole('regional_official'),
+                ],
+                'membership_requests' => [
+                    'pending'  => (clone $membershipQuery)->where('status', 'pending')->count(),
+                    'approved' => (clone $membershipQuery)->where('status', 'approved')->count(),
+                    'rejected' => (clone $membershipQuery)->where('status', 'rejected')->count(),
+                ],
+                'sympathizers' => [
+                    'total' => class_exists(\App\Models\Sympathizer::class)
+                        ? Sympathizer::query()->whereIn('party_branch_id', $visibleUserBranchIds ?? [])->count() : 0,
+                ],
+                'volunteers' => [
+                    'total' => class_exists(\App\Models\Volunteer::class)
+                        ? Volunteer::query()->whereIn('party_branch_id', $visibleUserBranchIds ?? [])->count() : 0,
+                ],
                 'scope' => [
                     'role' => $role,
                     'level' => 'partial_reports',
-                    'message' => 'Partial activity reports for local and regional officials.',
+                    'message' => 'Partial activity, user, and content reports for the assigned branch.',
                 ],
             ]);
         }
 
         $full = [
             'users' => [
-                'total'        => User::count(),
+                'total'        => (clone $userQuery)->count(),
                 'members'      => $countByRole('member'),
                 'sympathizers' => $countByRole('sympathizer'),
                 'volunteers'   => $countByRole('volunteer'),
@@ -72,9 +113,9 @@ class StatsController extends Controller
                 'supervisors' => $countByRole('super_admin'),
             ],
             'membership_requests' => [
-                'pending'  => MembershipRequest::where('status', 'pending')->count(),
-                'approved' => MembershipRequest::where('status', 'approved')->count(),
-                'rejected' => MembershipRequest::where('status', 'rejected')->count(),
+                'pending'  => (clone $membershipQuery)->where('status', 'pending')->count(),
+                'approved' => (clone $membershipQuery)->where('status', 'approved')->count(),
+                'rejected' => (clone $membershipQuery)->where('status', 'rejected')->count(),
             ],
             'donations' => [
                 'total'  => Donation::count(),
