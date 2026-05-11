@@ -4,5 +4,36 @@ use Illuminate\Database\Eloquent\Model;
 
 class Volunteer extends Model
 {
-    protected $fillable = ['name', 'email', 'phone', 'city', 'skills', 'motivation'];
+    protected $fillable = [
+        'user_id',
+        'name',
+        'email',
+        'phone',
+        'party_branch_id',
+        'city',
+        'skills',
+        'motivation',
+        'status',
+        'reviewed_by',
+        'reviewed_at',
+    ];
+
+    protected $casts = [
+        'reviewed_at' => 'datetime',
+    ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function partyBranch()
+    {
+        return $this->belongsTo(PartyBranch::class);
+    }
+
+    public function reviewer()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
 }
