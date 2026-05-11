@@ -41,6 +41,7 @@ Route::get('/events/{id}',       [EventController::class, 'show']);
 Route::get('/static-pages/{slug}', [StaticPageController::class, 'show']);
 Route::get('/media',             [MediaController::class, 'index']);
 Route::get('/search', SearchController::class);
+Route::get('/branches', [BranchController::class, 'index']);
 
 // Public forms
 Route::middleware('throttle:public-forms')->group(function () {
@@ -68,6 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Membership request (any authenticated user)
     Route::post('/membership-request', [MembershipRequestController::class, 'store'])->middleware('throttle:membership-request');
+    Route::get('/membership-request', [MembershipRequestController::class, 'mine']);
+    Route::get('/my-sympathizer-request', [SympathizerController::class, 'mine']);
+    Route::get('/my-volunteer-request', [VolunteerController::class, 'mine']);
 
     // Voting (controller handles audience check internally)
     Route::post('/vote', [PollController::class, 'vote'])->middleware('throttle:vote');
@@ -99,13 +103,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:local_official,regional_official,central_admin,super_admin')->group(function () {
         Route::get('/admin/stats', [StatsController::class, 'index']);
         Route::get('/admin/branches', [BranchController::class, 'index']);
+        Route::get('/admin/members', [MemberController::class, 'index']);
         Route::get('/admin/events', [EventController::class, 'index']);
+        Route::get('/admin/news', [NewsController::class, 'index']);
 
         Route::post('/events',                   [EventController::class, 'store'])->middleware('throttle:content-write');
         Route::put('/events/{id}',               [EventController::class, 'update']);
         Route::delete('/events/{id}',            [EventController::class, 'destroy']);
         Route::get('/events/{id}/registrations', [EventController::class, 'registrations']);
         Route::post('/events/{id}/recaps',       [EventController::class, 'storeRecap']);
+
+        Route::post('/news',          [NewsController::class, 'store'])->middleware('throttle:content-write');
+        Route::put('/news/{news}',    [NewsController::class, 'update']);
+        Route::delete('/news/{news}', [NewsController::class, 'destroy']);
 
         Route::post('/media',           [MediaController::class, 'store']);
         Route::delete('/media/{media}', [MediaController::class, 'destroy']);
@@ -123,17 +133,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/admin/membership-requests/{id}/reject',  [MembershipRequestController::class, 'reject']);
 
         // ── Members ──
-        Route::get('/admin/members',         [MemberController::class, 'index']);
         Route::get('/admin/members/{id}',    [MemberController::class, 'show']);
         Route::put('/admin/members/{id}',    [MemberController::class, 'update']);
         Route::delete('/admin/members/{id}', [MemberController::class, 'destroy']);
 
         // ── Sympathizers ──
         Route::get('/admin/sympathizers',         [SympathizerController::class, 'index']);
+        Route::put('/admin/sympathizers/{id}/status', [SympathizerController::class, 'updateStatus']);
         Route::delete('/admin/sympathizers/{id}', [SympathizerController::class, 'destroy']);
 
         // ── Volunteers ──
         Route::get('/admin/volunteers',         [VolunteerController::class, 'index']);
+        Route::put('/admin/volunteers/{id}/status', [VolunteerController::class, 'updateStatus']);
         Route::delete('/admin/volunteers/{id}', [VolunteerController::class, 'destroy']);
 
         // ── Polls ──
@@ -149,10 +160,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/donations/{donation}', [DonationController::class, 'destroy']);
 
         // ── News ──
-        Route::get('/admin/news', [NewsController::class, 'index']);
-        Route::post('/news',          [NewsController::class, 'store'])->middleware('throttle:content-write');
-        Route::put('/news/{news}',    [NewsController::class, 'update']);
-        Route::delete('/news/{news}', [NewsController::class, 'destroy']);
+        // News routes are available to local/regional officials above.
 
         // ── Contacts ──
         Route::get('/contacts',         [ContactController::class, 'index']);
@@ -173,9 +181,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/admin/newsletter/{id}',  [NewsletterController::class, 'destroy']);
         Route::post('/admin/newsletter/send',    [NewsletterController::class, 'send']);
 
-        // ── Sensitive technical audit logs ──
-        Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
-
     });
 
     // ─────────────────────────────────────────
@@ -183,6 +188,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // صلاحيات كاملة على النظام والإعدادات والأمان
     // ─────────────────────────────────────────
     Route::middleware('role:super_admin')->group(function () {
-        // Reserved for system settings and security endpoints.
+        // ── Sensitive technical audit logs ──
+        Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
     });
 });
