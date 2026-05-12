@@ -21,6 +21,7 @@ use App\Http\Controllers\BranchController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ReportController;
 
 // ─────────────────────────────────────────
 // PUBLIC ROUTES
@@ -102,6 +103,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────
     Route::middleware('role:local_official,regional_official,central_admin,super_admin')->group(function () {
         Route::get('/admin/stats', [StatsController::class, 'index']);
+        Route::get('/admin/reports/sent', [ReportController::class, 'sent']);
+        Route::get('/admin/reports/received', [ReportController::class, 'received']);
+        Route::post('/admin/reports', [ReportController::class, 'store'])->middleware('throttle:content-write');
+        Route::put('/admin/reports/{report}/send', [ReportController::class, 'send']);
+        Route::get('/admin/reports/{report}/download', [ReportController::class, 'download']);
         Route::get('/admin/branches', [BranchController::class, 'index']);
         Route::get('/admin/members', [MemberController::class, 'index']);
         Route::get('/admin/events', [EventController::class, 'index']);
