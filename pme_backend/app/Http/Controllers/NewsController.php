@@ -42,12 +42,7 @@ class NewsController extends Controller
             ->when(($data['archived'] ?? false), fn ($query) => $query->whereNotNull('archived_at'), fn ($query) => $query->whereNull('archived_at'))
             ->latest()
             ->when($request->user(), function ($query, $user) {
-                $role = $this->roleName($user);
-                if (in_array($role, ['local_official', 'regional_official'], true)) {
-                    return $query->where('party_branch_id', $user->party_branch_id);
-                }
-
-                return $this->applyBranchScope($query, $user);
+                return $this->applyManagedBranchScope($query, $user);
             })
             ->get();
 
@@ -191,7 +186,7 @@ class NewsController extends Controller
                         'action_label' => 'Lire',
                         'source_type' => 'news',
                         'source_id' => $news->id,
-                    ], auth()->id());
+                    ], auth()->id(), $news->party_branch_id);
                 }
 
                 return $news;
@@ -289,16 +284,9 @@ class NewsController extends Controller
     private function ensureCanAccessNews(Request $request, News $news): void
     {
         $actor = $request->user();
-        $role = $this->roleName($actor);
+        $branchIds = $this->managedBranchIdsVisibleTo($actor);
 
-        if (in_array($role, ['local_official', 'regional_official'], true)
-            && (int) $news->party_branch_id !== (int) $actor->party_branch_id) {
-            abort(403, 'You are not allowed to manage this news item.');
-        }
-
-        $branchIds = $this->branchIdsVisibleTo($actor);
-
-        if ($news->party_branch_id && $branchIds !== null && !in_array((int) $news->party_branch_id, $branchIds, true)) {
+        if ($branchIds !== null && !in_array((int) $news->party_branch_id, $branchIds, true)) {
             abort(403, 'You are not allowed to manage this news item.');
         }
     }

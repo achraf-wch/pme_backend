@@ -37,7 +37,7 @@ class SearchController extends Controller
 
         $news = News::query()
             ->where('is_published', true)
-            ->visibleTo($role)
+            ->visibleTo($role, $user)
             ->where(function ($query) use ($like) {
                 $query->where('title', 'like', $like)
                     ->orWhere('content', 'like', $like);
@@ -53,7 +53,7 @@ class SearchController extends Controller
             ]);
 
         $events = Event::query()
-            ->visibleTo($role)
+            ->visibleTo($role, $user)
             ->where(function ($query) use ($like) {
                 $query->where('title', 'like', $like)
                     ->orWhere('description', 'like', $like)

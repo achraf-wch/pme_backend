@@ -35,7 +35,10 @@ class MemberController extends Controller
     public function update(Request $request, $id)
     {
         $query = User::query()->whereKey($id);
-        $this->applyBranchScope($query, $request->user());
+        $branchIds = $this->userBranchIdsVisibleTo($request->user());
+        if ($branchIds !== null) {
+            $query->whereIn('party_branch_id', $branchIds);
+        }
         $user = $query->firstOrFail();
 
         $data = $request->validate([
@@ -62,7 +65,10 @@ class MemberController extends Controller
     public function destroy($id)
     {
         $query = User::query()->whereKey($id);
-        $this->applyBranchScope($query, request()->user());
+        $branchIds = $this->userBranchIdsVisibleTo(request()->user());
+        if ($branchIds !== null) {
+            $query->whereIn('party_branch_id', $branchIds);
+        }
         $query->firstOrFail()->delete();
         return response()->json(['message' => 'Member deleted']);
     }

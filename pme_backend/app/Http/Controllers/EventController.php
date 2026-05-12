@@ -30,12 +30,7 @@ class EventController extends Controller
         $query = Event::with(['creator', 'partyBranch'])->withCount('recaps')->latest();
 
         if ($user = request()->user()) {
-            $role = $this->roleName($user);
-            if (in_array($role, ['local_official', 'regional_official'], true)) {
-                $query->where('party_branch_id', $user->party_branch_id);
-            } else {
-                $this->applyBranchScope($query, $user);
-            }
+            $this->applyManagedBranchScope($query, $user);
         }
 
         return response()->json($query->get());
@@ -119,7 +114,7 @@ class EventController extends Controller
                     'action_label' => 'Voir l’activité',
                     'source_type' => 'event',
                     'source_id' => $event->id,
-                ], $user->id);
+                ], $user->id, $event->party_branch_id);
 
                 return $event;
             });
@@ -247,7 +242,7 @@ class EventController extends Controller
             'action_label' => 'Voir le récap',
             'source_type' => 'event_recap',
             'source_id' => $recap->id,
-        ], $request->user()->id);
+        ], $request->user()->id, $event->party_branch_id);
 
         return response()->json($recap->load('creator'), 201);
     }
@@ -265,7 +260,7 @@ class EventController extends Controller
 
                 // Check user's role is in the event audience
                 $audience = $event->audience ?? ['public'];
-                if (!in_array('public', $audience) && !in_array($role, $audience)) {
+                if (!$this->audienceAllowsRole($audience, $role)) {
                     throw new HttpResponseException(response()->json(['message' => 'You are not allowed to register for this event'], 403));
                 }
 
@@ -297,7 +292,7 @@ class EventController extends Controller
             });
         } catch (QueryException $exception) {
             if (in_array($exception->getCode(), ['23000', '23505'], true)) {
-                return response()->json(['message' => 'Registered']);
+                return response()->json(['message' => 'Déjà réservé.']);
             }
 
             throw $exception;
@@ -318,7 +313,7 @@ class EventController extends Controller
             ]);
         }
 
-        return response()->json(['message' => 'Registered']);
+        return response()->json(['message' => $result['created'] ? 'Réservation confirmée.' : 'Déjà réservé.']);
     }
 
     /**
@@ -336,17 +331,28 @@ class EventController extends Controller
     private function ensureCanAccessEvent(Request $request, Event $event): void
     {
         $actor = $request->user();
-        $role = $this->roleName($actor);
+        $branchIds = $this->managedBranchIdsVisibleTo($actor);
 
-        if (in_array($role, ['local_official', 'regional_official'], true)
-            && (int) $event->party_branch_id !== (int) $actor->party_branch_id) {
+        if ($branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
             abort(403, 'You are not allowed to manage this event.');
         }
+    }
 
-        $branchIds = $this->branchIdsVisibleTo($request->user());
-
-        if ($event->party_branch_id && $branchIds !== null && !in_array((int) $event->party_branch_id, $branchIds, true)) {
-            abort(403, 'You are not allowed to manage this event.');
+    private function audienceAllowsRole(array $audience, ?string $role): bool
+    {
+        if (in_array('public', $audience, true)) {
+            return true;
         }
+
+        if (!$role) {
+            return false;
+        }
+
+        if (in_array($role, $audience, true)) {
+            return true;
+        }
+
+        return in_array('member', $audience, true)
+            && in_array($role, ['local_official', 'regional_official', 'central_admin', 'super_admin'], true);
     }
 }

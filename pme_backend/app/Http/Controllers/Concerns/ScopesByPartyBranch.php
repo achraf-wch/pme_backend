@@ -25,25 +25,20 @@ trait ScopesByPartyBranch
             return [];
         }
 
+        $nationalIds = PartyBranch::where('type', 'national')->pluck('id')->map(fn ($id) => (int) $id)->all();
+
         if ($role === 'regional_official') {
             $childIds = PartyBranch::where('parent_id', $user->party_branch_id)->pluck('id')->all();
-            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds])));
+            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds, ...$nationalIds])));
         }
 
         $branch = $user->loadMissing('partyBranch')->partyBranch;
 
-        if ($role === 'local_official') {
-            return array_values(array_filter([
-                (int) $user->party_branch_id,
-                $branch?->parent_id ? (int) $branch->parent_id : null,
-            ]));
-        }
-
         if ($branch?->type === 'local' && $branch->parent_id) {
-            return [(int) $user->party_branch_id, (int) $branch->parent_id];
+            return array_values(array_unique([(int) $user->party_branch_id, (int) $branch->parent_id, ...$nationalIds]));
         }
 
-        return [(int) $user->party_branch_id];
+        return array_values(array_unique([(int) $user->party_branch_id, ...$nationalIds]));
     }
 
     protected function userBranchIdsVisibleTo(User $user): ?array
@@ -68,6 +63,37 @@ trait ScopesByPartyBranch
         }
 
         return [(int) $user->party_branch_id];
+    }
+
+    protected function managedBranchIdsVisibleTo(User $user): ?array
+    {
+        $role = $this->roleName($user);
+
+        if (in_array($role, ['central_admin', 'super_admin'], true)) {
+            return null;
+        }
+
+        if (!$user->party_branch_id) {
+            return [];
+        }
+
+        if ($role === 'regional_official') {
+            $childIds = PartyBranch::where('parent_id', $user->party_branch_id)->pluck('id')->all();
+            return array_map('intval', array_values(array_unique([(int) $user->party_branch_id, ...$childIds])));
+        }
+
+        return [(int) $user->party_branch_id];
+    }
+
+    protected function applyManagedBranchScope(Builder $query, User $user, string $column = 'party_branch_id'): Builder
+    {
+        $branchIds = $this->managedBranchIdsVisibleTo($user);
+
+        if ($branchIds === null) {
+            return $query;
+        }
+
+        return $query->whereIn($column, $branchIds);
     }
 
     protected function applyBranchScope(Builder $query, User $user, string $column = 'party_branch_id'): Builder
@@ -99,8 +125,7 @@ trait ScopesByPartyBranch
         $role = $this->roleName($user);
 
         $allowed = match ($role) {
-            'local_official' => ['public', 'visitor', 'sympathizer', 'volunteer', 'member', 'local_official'],
-            'regional_official' => ['public', 'visitor', 'sympathizer', 'volunteer', 'member', 'local_official', 'regional_official'],
+            'local_official', 'regional_official' => ['member'],
             default => ['public', 'visitor', 'sympathizer', 'volunteer', 'member', 'local_official', 'regional_official', 'central_admin', 'super_admin'],
         };
 

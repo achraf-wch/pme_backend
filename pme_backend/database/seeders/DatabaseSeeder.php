@@ -33,6 +33,32 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Section locale Casablanca'],
             ['type' => 'local', 'parent_id' => $casaBranch->id, 'city' => 'Casablanca', 'region' => 'Casablanca-Settat']
         );
+        $regionalBranches = collect([$rabatBranch, $casaBranch]);
+        $localBranches = collect([$rabatLocalBranch, $casaLocalBranch]);
+
+        $branchFixtures = [
+            'Fès-Meknès' => ['Fès', 'Meknès', 'Ifrane'],
+            'Marrakech-Safi' => ['Marrakech', 'Safi', 'Essaouira'],
+            'Tanger-Tétouan-Al Hoceïma' => ['Tanger', 'Tétouan', 'Al Hoceïma'],
+            'Souss-Massa' => ['Agadir', 'Taroudant', 'Tiznit'],
+            'Oriental' => ['Oujda', 'Nador', 'Berkane'],
+            'Drâa-Tafilalet' => ['Errachidia', 'Ouarzazate', 'Zagora'],
+        ];
+
+        foreach ($branchFixtures as $regionName => $cities) {
+            $regionalBranch = PartyBranch::firstOrCreate(
+                ['name' => "Région {$regionName}"],
+                ['type' => 'regional', 'parent_id' => $nationalBranch->id, 'region' => $regionName]
+            );
+            $regionalBranches->push($regionalBranch);
+
+            foreach ($cities as $city) {
+                $localBranches->push(PartyBranch::firstOrCreate(
+                    ['name' => "Section locale {$city}"],
+                    ['type' => 'local', 'parent_id' => $regionalBranch->id, 'city' => $city, 'region' => $regionName]
+                ));
+            }
+        }
 
         // -------------------------------------------------------
         // 1. ROLES
@@ -104,7 +130,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'name'       => 'Responsable Local',
-                'email'      => 'local_official@gmail.com',
+                'email'      => 'local_rabat@gmail.com',
                 'password'   => Hash::make('password'),
                 'role_id'    => $roleIds['local_official'],
                 'party_branch_id' => $rabatLocalBranch->id,
@@ -114,7 +140,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'name'       => 'Responsable Régional',
-                'email'      => 'regional_official@gmail.com',
+                'email'      => 'region_rabat_sale_kenitra@gmail.com',
                 'password'   => Hash::make('password'),
                 'role_id'    => $roleIds['regional_official'],
                 'party_branch_id' => $rabatBranch->id,
@@ -143,11 +169,70 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
         ];
-        DB::table('users')->insert($users);
+
+        foreach ($regionalBranches as $branch) {
+            $slug = Str::slug($branch->region ?: $branch->name, '_');
+            if (in_array($branch->id, [$rabatBranch->id], true)) {
+                continue;
+            }
+
+            $users[] = [
+                'name'       => 'Responsable Régional ' . ($branch->region ?: $branch->name),
+                'email'      => "region_{$slug}@gmail.com",
+                'password'   => Hash::make('password'),
+                'role_id'    => $roleIds['regional_official'],
+                'party_branch_id' => $branch->id,
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        foreach ($localBranches as $branch) {
+            $slug = Str::slug($branch->city ?: $branch->name, '_');
+            if (in_array($branch->id, [$rabatLocalBranch->id], true)) {
+                continue;
+            }
+
+            $users[] = [
+                'name'       => 'Responsable Local ' . ($branch->city ?: $branch->name),
+                'email'      => "local_{$slug}@gmail.com",
+                'password'   => Hash::make('password'),
+                'role_id'    => $roleIds['local_official'],
+                'party_branch_id' => $branch->id,
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        $memberFirstNames = ['Yassine', 'Imane', 'Mehdi', 'Salma'];
+        foreach ($localBranches as $branch) {
+            $slug = Str::slug($branch->city ?: $branch->name, '_');
+            foreach ($memberFirstNames as $index => $firstName) {
+                $users[] = [
+                    'name'       => "{$firstName} " . ($branch->city ?: $branch->name),
+                    'email'      => sprintf('member%d_%s@gmail.com', $index + 1, $slug),
+                    'password'   => Hash::make('password'),
+                    'role_id'    => $roleIds['member'],
+                    'party_branch_id' => $branch->id,
+                    'is_active'  => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+        }
+
+        foreach ($users as $seedUser) {
+            DB::table('users')->updateOrInsert(
+                ['email' => $seedUser['email']],
+                $seedUser
+            );
+        }
 
         $alice  = DB::table('users')->where('email', 'central_admin@gmail.com')->value('id');
         $bob    = DB::table('users')->where('email', 'member@gmail.com')->value('id');
-        $clara  = DB::table('users')->where('email', 'regional_official@gmail.com')->value('id');
+        $clara  = DB::table('users')->where('email', 'region_rabat_sale_kenitra@gmail.com')->value('id');
         $david  = DB::table('users')->where('email', 'visitor@gmail.com')->value('id');
 
         // -------------------------------------------------------
@@ -393,6 +478,7 @@ class DatabaseSeeder extends Seeder
             [
                 'user_id'     => $bob,
                 'status'      => 'approved',
+                'review_stage' => 'completed',
                 'motivation'  => 'I want to contribute to the community and help with outreach programs.',
                 'reviewed_by' => $alice,
                 'reviewed_at' => now()->subDays(5),
@@ -402,6 +488,7 @@ class DatabaseSeeder extends Seeder
             [
                 'user_id'     => $david,
                 'status'      => 'approved',
+                'review_stage' => 'completed',
                 'motivation'  => 'I have been following your work for two years and believe in your mission.',
                 'reviewed_by' => $alice,
                 'reviewed_at' => now()->subDays(3),
@@ -411,6 +498,7 @@ class DatabaseSeeder extends Seeder
             [
                 'user_id'     => DB::table('users')->where('email', 'volunteer@gmail.com')->value('id'),
                 'status'      => 'rejected',
+                'review_stage' => 'rejected',
                 'motivation'  => 'Looking for networking opportunities.',
                 'reviewed_by' => $clara,
                 'reviewed_at' => now()->subDays(1),

@@ -36,8 +36,8 @@ class AdminSeeder extends Seeder
         $accounts = [
             ['role' => 'super_admin', 'name' => 'Superviseur', 'email' => 'super_admin@gmail.com', 'branch_id' => $national->id],
             ['role' => 'central_admin', 'name' => 'Administration Centrale', 'email' => 'central_admin@gmail.com', 'branch_id' => $national->id],
-            ['role' => 'regional_official', 'name' => 'Responsable Régional', 'email' => 'regional_official@gmail.com', 'branch_id' => $rabat->id],
-            ['role' => 'local_official', 'name' => 'Responsable Local', 'email' => 'local_official@gmail.com', 'branch_id' => $rabatLocal->id],
+            ['role' => 'regional_official', 'name' => 'Responsable Régional Rabat-Salé-Kénitra', 'email' => 'region_rabat_sale_kenitra@gmail.com', 'branch_id' => $rabat->id],
+            ['role' => 'local_official', 'name' => 'Responsable Local Rabat', 'email' => 'local_rabat@gmail.com', 'branch_id' => $rabatLocal->id],
             ['role' => 'member', 'name' => 'Membre', 'email' => 'member@gmail.com', 'branch_id' => $rabatLocal->id],
             ['role' => 'volunteer', 'name' => 'Bénévole', 'email' => 'volunteer@gmail.com', 'branch_id' => $casaLocal->id],
             ['role' => 'sympathizer', 'name' => 'Sympathisant', 'email' => 'sympathizer@gmail.com', 'branch_id' => $rabatLocal->id],

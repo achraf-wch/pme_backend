@@ -19,14 +19,17 @@ class StaticPageController extends Controller
 
     public function update(Request $request, string $slug)
     {
+        $page = StaticPage::firstOrNew(['slug' => $slug]);
+
         $data = $request->validate([
-            'title' => 'required|string|max:255',
-            'content' => 'required|string',
+            'title' => ($page->exists ? 'sometimes' : 'required') . '|required|string|max:255',
+            'content' => ($page->exists ? 'sometimes' : 'required') . '|required|string',
             'meta_title' => 'nullable|string|max:255',
             'meta_description' => 'nullable|string|max:500',
         ]);
 
-        $page = StaticPage::updateOrCreate(['slug' => $slug], $data);
+        $page->fill($data);
+        $page->save();
 
         return response()->json($page);
     }

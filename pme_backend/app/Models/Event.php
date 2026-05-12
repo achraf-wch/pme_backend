@@ -53,13 +53,19 @@ class Event extends Model
         return $query->where(function ($q) use ($role, $user) {
             $q->where(function ($audience) use ($role) {
                 $audience->whereNull('audience')->orWhereJsonContains('audience', 'public');
-                if ($role) {
-                    $audience->orWhereJsonContains('audience', $role);
+                foreach (self::audienceKeysForRole($role) as $audienceKey) {
+                    $audience->orWhereJsonContains('audience', $audienceKey);
                 }
             });
 
             if (!$user) {
-                $q->whereNull('party_branch_id');
+                $nationalIds = PartyBranch::where('type', 'national')->pluck('id')->all();
+                $q->where(function ($branch) use ($nationalIds) {
+                    $branch->whereNull('party_branch_id');
+                    if ($nationalIds) {
+                        $branch->orWhereIn('party_branch_id', $nationalIds);
+                    }
+                });
                 return;
             }
 
@@ -87,21 +93,44 @@ class Event extends Model
             return [];
         }
 
+        $nationalIds = PartyBranch::where('type', 'national')->pluck('id')->map(fn ($id) => (int) $id)->all();
+
         if ($role === 'regional_official') {
             $childIds = PartyBranch::where('parent_id', $user->party_branch_id)->pluck('id')->all();
-            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds])));
+            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds, ...$nationalIds])));
         }
 
         $branch = $user->partyBranch;
+
+        if (in_array($role, ['visitor', 'sympathizer', 'volunteer', 'member'], true)
+            && $branch?->type === 'regional') {
+            return array_values(array_unique([(int) $user->party_branch_id, ...$nationalIds]));
+        }
+
         if ($branch?->type === 'local' && $branch->parent_id) {
-            return [(int) $user->party_branch_id, (int) $branch->parent_id];
+            return array_values(array_unique([(int) $user->party_branch_id, (int) $branch->parent_id, ...$nationalIds]));
         }
 
         if ($branch?->type === 'regional') {
             $childIds = PartyBranch::where('parent_id', $user->party_branch_id)->pluck('id')->all();
-            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds])));
+            return array_map('intval', array_values(array_unique([$user->party_branch_id, ...$childIds, ...$nationalIds])));
         }
 
-        return [(int) $user->party_branch_id];
+        return array_values(array_unique([(int) $user->party_branch_id, ...$nationalIds]));
+    }
+
+    private static function audienceKeysForRole(?string $role): array
+    {
+        if (!$role) {
+            return [];
+        }
+
+        $keys = [$role];
+
+        if (in_array($role, ['local_official', 'regional_official', 'central_admin', 'super_admin'], true)) {
+            $keys[] = 'member';
+        }
+
+        return array_values(array_unique($keys));
     }
 }

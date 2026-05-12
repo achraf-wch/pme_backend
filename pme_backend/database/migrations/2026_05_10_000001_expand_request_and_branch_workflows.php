@@ -82,12 +82,24 @@ return new class extends Migration
                 $table->foreignId('party_branch_id')->nullable()->after('author_id')->constrained('party_branches')->nullOnDelete();
             }
         });
+
+        Schema::table('media', function (Blueprint $table) {
+            if (!Schema::hasColumn('media', 'party_branch_id')) {
+                $table->foreignId('party_branch_id')->nullable()->after('uploaded_by')->constrained('party_branches')->nullOnDelete();
+            }
+        });
     }
 
     public function down(): void
     {
         Schema::table('news', function (Blueprint $table) {
             if (Schema::hasColumn('news', 'party_branch_id')) {
+                $table->dropConstrainedForeignId('party_branch_id');
+            }
+        });
+
+        Schema::table('media', function (Blueprint $table) {
+            if (Schema::hasColumn('media', 'party_branch_id')) {
                 $table->dropConstrainedForeignId('party_branch_id');
             }
         });

@@ -73,9 +73,6 @@ class MembershipRequestController extends Controller
             'review_stage' => 'pending',
         ]);
 
-        $user->party_branch_id = $localBranch->id;
-        $user->save();
-
         $this->audit($request, 'membership_request.created', $membershipRequest, [
             'user_id' => $user->id,
             'regional_branch_id' => $regionalBranch->id,
@@ -104,6 +101,7 @@ class MembershipRequestController extends Controller
         return response()->json(
             MembershipRequest::with(['centralReviewer', 'superReviewer', 'reviewer', 'regionalBranch', 'localBranch'])
                 ->where('user_id', $request->user()->id)
+                ->where('status', 'pending')
                 ->latest()
                 ->first()
         );
@@ -135,34 +133,25 @@ class MembershipRequestController extends Controller
                 throw new HttpResponseException(response()->json(['message' => 'Request already processed.'], 400));
             }
 
-            if ($role === 'central_admin') {
-                if ($membershipRequest->central_reviewed_by) {
-                    throw new HttpResponseException(response()->json(['message' => 'Central review already completed.'], 400));
-                }
-
-                $membershipRequest->review_stage = 'central_approved';
-                $membershipRequest->central_reviewed_by = $actor->id;
-                $membershipRequest->central_reviewed_at = now();
-                $membershipRequest->reviewed_by = $actor->id;
-                $membershipRequest->reviewed_at = now();
-                $membershipRequest->save();
-
-                return $membershipRequest;
-            }
-
-            if ($role !== 'super_admin') {
+            if (!in_array($role, ['central_admin', 'super_admin'], true)) {
                 throw new HttpResponseException(response()->json(['message' => 'Unauthorized.'], 403));
             }
 
             $memberRole = Role::where('name', 'member')->firstOrFail();
             $user = User::whereKey($membershipRequest->user_id)->lockForUpdate()->firstOrFail();
             $user->role_id = $memberRole->id;
+            $user->party_branch_id = $membershipRequest->local_branch_id;
             $user->save();
 
             $membershipRequest->status = 'approved';
             $membershipRequest->review_stage = 'completed';
-            $membershipRequest->super_reviewed_by = $actor->id;
-            $membershipRequest->super_reviewed_at = now();
+            if ($role === 'central_admin') {
+                $membershipRequest->central_reviewed_by = $actor->id;
+                $membershipRequest->central_reviewed_at = now();
+            } else {
+                $membershipRequest->super_reviewed_by = $actor->id;
+                $membershipRequest->super_reviewed_at = now();
+            }
             $membershipRequest->reviewed_by = $actor->id;
             $membershipRequest->reviewed_at = now();
             $membershipRequest->save();
@@ -177,9 +166,7 @@ class MembershipRequestController extends Controller
         ]);
 
         return response()->json([
-            'message' => $role === 'central_admin'
-                ? 'Central review completed. Waiting for supervisor validation.'
-                : 'Membership approved. User is now a member.',
+            'message' => 'Membership approved. User is now a member.',
             'request' => $membershipRequest->load(['centralReviewer', 'superReviewer', 'reviewer', 'regionalBranch', 'localBranch']),
         ]);
     }

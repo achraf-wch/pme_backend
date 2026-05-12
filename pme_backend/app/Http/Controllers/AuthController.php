@@ -21,7 +21,7 @@ class AuthController extends Controller
         ]);
 
         $data['password'] = Hash::make($data['password']);
-        $data['role_id']  = \App\Models\Role::where('name', 'visitor')->first()->id;
+        $data['role_id']  = \App\Models\Role::where('name', 'sympathizer')->first()->id;
 
         $user  = User::create($data);
         $token = $user->createToken('auth_token')->plainTextToken;
