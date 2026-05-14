@@ -28,6 +28,7 @@ use App\Http\Controllers\ReportController;
 // ─────────────────────────────────────────
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
 Route::post('/login',    [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/auth/google/callback', [AuthController::class, 'googleCallback'])->middleware('throttle:auth-login');
 
 // ADD THESE THREE LINES FOR PUBLIC FEEDS
 Route::get('/news/feed',   [NewsController::class, 'feed']);
