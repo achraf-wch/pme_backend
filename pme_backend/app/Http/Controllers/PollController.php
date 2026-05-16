@@ -11,11 +11,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use App\Http\Controllers\Concerns\RecordsAuditLogs;
+use App\Http\Controllers\Concerns\ScopesByPartyBranch;
 use App\Services\NotificationService;
 
 class PollController extends Controller
 {
     use RecordsAuditLogs;
+    use ScopesByPartyBranch;
 
     public function __construct(private NotificationService $notifications)
     {
@@ -26,7 +28,7 @@ class PollController extends Controller
      */
     public function index()
     {
-        $polls = Poll::with('options')->latest()->get();
+        $polls = Poll::with(['options', 'partyBranch'])->latest()->get();
         return response()->json($polls);
     }
 
@@ -46,9 +48,9 @@ class PollController extends Controller
         $role = optional($user?->role)->name;
         $now  = now();
 
-        $polls = Poll::with('options')
+        $polls = Poll::with(['options', 'partyBranch'])
             ->where('end_date', '>=', $now)
-            ->visibleTo($role)
+            ->visibleTo($role, $user)
             ->get()
             ->map(function ($poll) use ($user) {
                 $poll->can_vote = $user ? $poll->userCanVote($user) : false;
@@ -69,9 +71,9 @@ class PollController extends Controller
         $user = $request->user()->load('role');
         $now  = now();
 
-        $polls = Poll::with('options')
+        $polls = Poll::with(['options', 'partyBranch'])
             ->where('end_date', '>=', $now)
-            ->visibleTo(optional($user->role)->name)
+            ->visibleTo(optional($user->role)->name, $user)
             ->get()
             ->map(function ($poll) use ($user) {
                 $poll->can_vote = $poll->userCanVote($user);
@@ -97,19 +99,26 @@ class PollController extends Controller
             'end_date'          => 'required|date|after:start_date',
             'target_audience'   => 'required|array|min:1',
             'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
+            'party_branch_id'    => 'nullable|exists:party_branches,id',
             'is_secret'         => 'nullable|boolean',
             'options'           => 'required|array|min:2',
             'options.*'         => 'required|string',
         ]);
 
-        $poll = DB::transaction(function () use ($request) {
+        $user = $request->user();
+        $this->ensureAudienceAllowedForWrite($user, $request->target_audience);
+        $this->ensureCanManageBranch($user, $request->party_branch_id);
+        $branchId = $this->branchIdForWrite($user, $request->party_branch_id);
+
+        $poll = DB::transaction(function () use ($request, $branchId, $user) {
             $poll = Poll::create([
                 'title'           => $request->title,
                 'description'     => $request->description,
                 'start_date'      => $request->start_date,
                 'end_date'        => $request->end_date,
                 'is_secret'       => $request->boolean('is_secret'),
-                'created_by'      => Auth::id(),
+                'created_by'      => $user->id,
+                'party_branch_id' => $branchId,
                 'target_audience' => $request->target_audience,
             ]);
 
@@ -121,7 +130,10 @@ class PollController extends Controller
                 ]);
             }
 
-            $this->audit($request, 'poll.created', $poll, ['target_audience' => $poll->target_audience]);
+            $this->audit($request, 'poll.created', $poll, [
+                'target_audience' => $poll->target_audience,
+                'party_branch_id' => $poll->party_branch_id,
+            ]);
 
             $this->notifications->notifyAudience($poll->target_audience ?? ['public'], [
                 'category' => 'poll',
@@ -131,12 +143,12 @@ class PollController extends Controller
                 'action_label' => 'Participer',
                 'source_type' => 'poll',
                 'source_id' => $poll->id,
-            ], Auth::id());
+            ], $user->id, $poll->party_branch_id);
 
             return $poll;
         });
 
-        return response()->json($poll->load('options'), 201);
+        return response()->json($poll->load(['options', 'partyBranch']), 201);
     }
 
     /**
@@ -219,10 +231,20 @@ class PollController extends Controller
             'end_date'          => 'sometimes|required|date|after:start_date',
             'target_audience'   => 'sometimes|required|array|min:1',
             'target_audience.*' => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
+            'party_branch_id'    => 'nullable|exists:party_branches,id',
             'is_secret'         => 'nullable|boolean',
             'options'           => 'sometimes|required|array|min:2',
             'options.*'         => 'required|string',
         ]);
+
+        if (array_key_exists('target_audience', $data)) {
+            $this->ensureAudienceAllowedForWrite($request->user(), $data['target_audience']);
+        }
+
+        if (array_key_exists('party_branch_id', $data)) {
+            $this->ensureCanManageBranch($request->user(), $data['party_branch_id']);
+            $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id']);
+        }
 
         if (array_key_exists('is_secret', $data)) {
             $data['is_secret'] = $request->boolean('is_secret');
@@ -244,9 +266,12 @@ class PollController extends Controller
             }
         }
 
-        $this->audit($request, 'poll.updated', $poll, ['target_audience' => $poll->target_audience]);
+        $this->audit($request, 'poll.updated', $poll, [
+            'target_audience' => $poll->target_audience,
+            'party_branch_id' => $poll->party_branch_id,
+        ]);
 
-        return response()->json($poll->load('options'));
+        return response()->json($poll->load(['options', 'partyBranch']));
     }
 
     public function destroy(Request $request, $id)
