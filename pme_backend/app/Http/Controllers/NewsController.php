@@ -144,6 +144,9 @@ class NewsController extends Controller
             'published_at' => 'nullable|date',
             'audience'     => 'required|array|min:1',
             'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
+            'auto_share_social' => 'nullable',
+            'social_channels' => 'nullable|array',
+            'social_channels.*' => 'string|in:facebook,x,instagram,linkedin,whatsapp',
             'party_branch_id' => 'nullable|exists:party_branches,id',
             'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
@@ -154,6 +157,8 @@ class NewsController extends Controller
         $this->ensureCanManageBranch($request->user(), $data['party_branch_id'] ?? null);
         $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id'] ?? null);
         $data['is_published'] = $this->booleanInput($request, 'is_published', true);
+        $data['auto_share_social'] = $this->booleanInput($request, 'auto_share_social', false);
+        $data['social_channels'] = $data['auto_share_social'] ? ($data['social_channels'] ?? []) : [];
 
         if ($data['is_published']) {
             $data['published_at'] = now();
@@ -221,6 +226,9 @@ class NewsController extends Controller
             'archived_at'  => 'nullable|date',
             'audience'     => 'sometimes|required|array|min:1',
             'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
+            'auto_share_social' => 'nullable',
+            'social_channels' => 'nullable|array',
+            'social_channels.*' => 'string|in:facebook,x,instagram,linkedin,whatsapp',
             'party_branch_id' => 'nullable|exists:party_branches,id',
             'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
@@ -231,6 +239,10 @@ class NewsController extends Controller
             if ($data['is_published'] && !$newsItem->published_at) {
                 $data['published_at'] = now();
             }
+        }
+        if ($request->has('auto_share_social')) {
+            $data['auto_share_social'] = $this->booleanInput($request, 'auto_share_social');
+            $data['social_channels'] = $data['auto_share_social'] ? ($data['social_channels'] ?? []) : [];
         }
         if (array_key_exists('audience', $data)) {
             $this->ensureAudienceAllowedForWrite($request->user(), $data['audience']);

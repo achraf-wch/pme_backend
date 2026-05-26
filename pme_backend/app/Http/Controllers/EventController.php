@@ -52,7 +52,8 @@ class EventController extends Controller
         $events = Event::with('creator')
             ->visibleTo($role, $user)
             ->latest('start_time')
-            ->get();
+            ->get()
+            ->map(fn (Event $event) => $this->attachRegistrationState($event, $user));
 
         return response()->json($events);
     }
@@ -66,7 +67,7 @@ class EventController extends Controller
             ->visibleTo($role, $user)
             ->findOrFail($id);
 
-        return response()->json($event);
+        return response()->json($this->attachRegistrationState($event, $user));
     }
 
     /**
@@ -314,6 +315,19 @@ class EventController extends Controller
         }
 
         return response()->json(['message' => $result['created'] ? 'Réservation confirmée.' : 'Déjà réservé.']);
+    }
+
+    private function attachRegistrationState(Event $event, $user): Event
+    {
+        $event->registrations_count = $event->registrations()->count();
+        $event->has_registered = $user
+            ? EventRegistration::where('event_id', $event->id)->where('user_id', $user->id)->exists()
+            : false;
+        $event->can_register = (bool) $user
+            && !$event->has_registered
+            && (!$event->end_time || $event->end_time->isFuture());
+
+        return $event;
     }
 
     /**

@@ -20,13 +20,17 @@ class News extends Model
         'image_path',
         'attachment_path',
         'audience',
+        'auto_share_social',
+        'social_channels',
     ];
 
     protected $casts = [
         'is_published' => 'boolean',
+        'auto_share_social' => 'boolean',
         'published_at' => 'datetime',
         'archived_at'  => 'datetime',
         'audience'     => 'array',
+        'social_channels' => 'array',
     ];
 
     public function author()

@@ -30,7 +30,7 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('throt
 Route::post('/login',    [AuthController::class, 'login'])->middleware('throttle:auth-login');
 Route::post('/auth/google/callback', [AuthController::class, 'googleCallback'])->middleware('throttle:auth-login');
 
-// ADD THESE THREE LINES FOR PUBLIC FEEDS
+// PUBLIC FEEDS
 Route::get('/news/feed',   [NewsController::class, 'feed']);
 Route::get('/events/feed', [EventController::class, 'feed']);
 Route::get('/polls/feed',  [PollController::class, 'feed']);
