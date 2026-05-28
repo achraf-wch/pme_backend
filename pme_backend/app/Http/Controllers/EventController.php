@@ -6,6 +6,12 @@ use App\Models\Event;
 use App\Models\EventRecap;
 use App\Models\EventRegistration;
 use App\Http\Controllers\Concerns\ScopesByPartyBranch;
+use App\Http\Requests\StoreEventRecapRequest;
+use App\Http\Requests\StoreEventRequest;
+use App\Http\Requests\UpdateEventRequest;
+use App\Http\Resources\EventRecapResource;
+use App\Http\Resources\EventRegistrationResource;
+use App\Http\Resources\EventResource;
 use App\Services\NotificationService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -33,7 +39,7 @@ class EventController extends Controller
             $this->applyManagedBranchScope($query, $user);
         }
 
-        return response()->json($query->get());
+        return EventResource::collection($query->get());
     }
 
     /**
@@ -55,7 +61,7 @@ class EventController extends Controller
             ->get()
             ->map(fn (Event $event) => $this->attachRegistrationState($event, $user));
 
-        return response()->json($events);
+        return EventResource::collection($events);
     }
 
     public function show($id)
@@ -67,26 +73,15 @@ class EventController extends Controller
             ->visibleTo($role, $user)
             ->findOrFail($id);
 
-        return response()->json($this->attachRegistrationState($event, $user));
+        return new EventResource($this->attachRegistrationState($event, $user));
     }
 
     /**
      * Admin: create an event.
      */
-    public function store(Request $request)
+    public function store(StoreEventRequest $request)
     {
-        $data = $request->validate([
-            'title'         => 'required|string|max:255',
-            'description'   => 'nullable|string',
-            'location'      => 'required|string|max:255',
-            'start_time'    => 'required|date',
-            'end_time'      => 'required|date|after:start_time',
-            'max_attendees' => 'nullable|integer|min:1',
-            'audience'      => 'required|array|min:1',
-            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
-            'party_branch_id' => 'nullable|exists:party_branches,id',
-            'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
-        ]);
+        $data = $request->validated();
 
         $user = $request->user();
         $this->ensureAudienceAllowedForWrite($user, $data['audience']);
@@ -127,29 +122,20 @@ class EventController extends Controller
             throw $exception;
         }
 
-        return response()->json($event->load(['creator', 'partyBranch']), 201);
+        return (new EventResource($event->load(['creator', 'partyBranch'])))
+            ->response()
+            ->setStatusCode(201);
     }
 
     /**
      * Admin: update an event.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateEventRequest $request, $id)
     {
         $event = Event::findOrFail($id);
         $this->ensureCanAccessEvent($request, $event);
 
-        $data = $request->validate([
-            'title'         => 'sometimes|required|string|max:255',
-            'description'   => 'nullable|string',
-            'location'      => 'sometimes|required|string|max:255',
-            'start_time'    => 'sometimes|required|date',
-            'end_time'      => 'sometimes|required|date|after:start_time',
-            'max_attendees' => 'nullable|integer|min:1',
-            'audience'      => 'sometimes|required|array|min:1',
-            'audience.*'    => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
-            'party_branch_id' => 'nullable|exists:party_branches,id',
-            'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf,doc,docx|max:10240',
-        ]);
+        $data = $request->validated();
 
         if (array_key_exists('audience', $data)) {
             $this->ensureAudienceAllowedForWrite($request->user(), $data['audience']);
@@ -171,7 +157,7 @@ class EventController extends Controller
         unset($data['attachment']);
         $event->update($data);
 
-        return response()->json($event->load(['creator', 'partyBranch']));
+        return new EventResource($event->load(['creator', 'partyBranch']));
     }
 
     /**
@@ -203,10 +189,10 @@ class EventController extends Controller
             ->with(['user', 'user.partyBranch'])
             ->get();
 
-        return response()->json($registrations);
+        return EventRegistrationResource::collection($registrations);
     }
 
-    public function storeRecap(Request $request, $id)
+    public function storeRecap(StoreEventRecapRequest $request, $id)
     {
         $event = Event::findOrFail($id);
         $this->ensureCanAccessEvent($request, $event);
@@ -215,12 +201,7 @@ class EventController extends Controller
             return response()->json(['message' => 'Recaps can be added after the event has finished.'], 422);
         }
 
-        $data = $request->validate([
-            'title' => 'required|string|max:255',
-            'content' => 'nullable|string',
-            'photos' => 'nullable|array|max:12',
-            'photos.*' => 'file|mimes:jpg,jpeg,png,gif,webp|max:5120',
-        ]);
+        $data = $request->validated();
 
         $photos = [];
         foreach ($request->file('photos', []) as $photo) {
@@ -245,7 +226,9 @@ class EventController extends Controller
             'source_id' => $recap->id,
         ], $request->user()->id, $event->party_branch_id);
 
-        return response()->json($recap->load('creator'), 201);
+        return (new EventRecapResource($recap->load('creator')))
+            ->response()
+            ->setStatusCode(201);
     }
 
     /**
@@ -339,7 +322,7 @@ class EventController extends Controller
             ->with('event')
             ->get();
 
-        return response()->json($registrations);
+        return EventRegistrationResource::collection($registrations);
     }
 
     private function ensureCanAccessEvent(Request $request, Event $event): void

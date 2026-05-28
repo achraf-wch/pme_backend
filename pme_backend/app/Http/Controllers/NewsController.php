@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\News;
 use App\Http\Controllers\Concerns\ScopesByPartyBranch;
+use App\Http\Requests\IndexNewsRequest;
+use App\Http\Requests\StoreNewsRequest;
+use App\Http\Requests\UpdateNewsRequest;
+use App\Http\Resources\NewsResource;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,15 +25,9 @@ class NewsController extends Controller
     /**
      * Admin: all news regardless of audience.
      */
-    public function index(Request $request)
+    public function index(IndexNewsRequest $request)
     {
-        $data = $request->validate([
-            'q' => 'nullable|string|max:120',
-            'type' => 'nullable|string|max:40',
-            'topic' => 'nullable|string|max:255',
-            'region' => 'nullable|string|max:255',
-            'archived' => 'nullable|boolean',
-        ]);
+        $data = $request->validated();
 
         $news = News::with(['author', 'partyBranch'])
             ->when($data['q'] ?? null, function ($query, $q) {
@@ -46,7 +44,7 @@ class NewsController extends Controller
             })
             ->get();
 
-        return response()->json($news);
+        return NewsResource::collection($news);
     }
 
     /**
@@ -62,14 +60,14 @@ class NewsController extends Controller
         $user = $request->user('sanctum') ?: $request->user();
         $role = optional($user?->loadMissing('role')->role)->name;
 
-        return response()->json($this->visibleFeedForRole($role, $user)->get());
+        return NewsResource::collection($this->visibleFeedForRole($role, $user)->get());
     }
 
     public function mine(Request $request)
     {
         $role = optional($request->user()->loadMissing('role')->role)->name;
 
-        return response()->json($this->visibleFeedForRole($role, $request->user())->get());
+        return NewsResource::collection($this->visibleFeedForRole($role, $request->user())->get());
     }
 
     private function visibleFeedForRole(?string $role, $user = null)
@@ -126,33 +124,17 @@ class NewsController extends Controller
             abort(404);
         }
 
-        return response()->json($news->load(['author', 'partyBranch']));
+        return new NewsResource($news->load(['author', 'partyBranch']));
     }
 
     /**
      * Admin: create a news article.
      */
-    public function store(Request $request)
+    public function store(StoreNewsRequest $request)
     {
-        $data = $request->validate([
-            'title'        => 'required|string|max:255',
-            'type'         => 'nullable|string|in:news,communique,article',
-            'topic'        => 'nullable|string|max:255',
-            'region'       => 'nullable|string|max:255',
-            'content'      => 'required|string',
-            'is_published' => 'nullable',
-            'published_at' => 'nullable|date',
-            'audience'     => 'required|array|min:1',
-            'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
-            'auto_share_social' => 'nullable',
-            'social_channels' => 'nullable|array',
-            'social_channels.*' => 'string|in:facebook,x,instagram,linkedin,whatsapp',
-            'party_branch_id' => 'nullable|exists:party_branches,id',
-            'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
-            'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
-        ]);
+        $data = $request->validated();
 
-        $data['author_id'] = auth()->id();
+        $data['author_id'] = $request->user()->id;
         $this->ensureAudienceAllowedForWrite($request->user(), $data['audience']);
         $this->ensureCanManageBranch($request->user(), $data['party_branch_id'] ?? null);
         $data['party_branch_id'] = $this->branchIdForWrite($request->user(), $data['party_branch_id'] ?? null);
@@ -179,7 +161,7 @@ class NewsController extends Controller
         unset($data['image'], $data['attachment']);
 
         try {
-            $news = DB::transaction(function () use ($data) {
+            $news = DB::transaction(function () use ($data, $request) {
                 $news = News::create($data);
 
                 if ($news->is_published) {
@@ -191,7 +173,7 @@ class NewsController extends Controller
                         'action_label' => 'Lire',
                         'source_type' => 'news',
                         'source_id' => $news->id,
-                    ], auth()->id(), $news->party_branch_id);
+                    ], $request->user()->id, $news->party_branch_id);
                 }
 
                 return $news;
@@ -204,35 +186,20 @@ class NewsController extends Controller
             throw $exception;
         }
 
-        return response()->json($news->load(['author', 'partyBranch']), 201);
+        return (new NewsResource($news->load(['author', 'partyBranch'])))
+            ->response()
+            ->setStatusCode(201);
     }
 
     /**
      * Admin: update a news article.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateNewsRequest $request, $id)
     {
         $newsItem = News::findOrFail($id);
         $this->ensureCanAccessNews($request, $newsItem);
 
-        $data = $request->validate([
-            'title'        => 'sometimes|required|string|max:255',
-            'type'         => 'nullable|string|in:news,communique,article',
-            'topic'        => 'nullable|string|max:255',
-            'region'       => 'nullable|string|max:255',
-            'content'      => 'sometimes|required|string',
-            'is_published' => 'nullable',
-            'published_at' => 'nullable|date',
-            'archived_at'  => 'nullable|date',
-            'audience'     => 'sometimes|required|array|min:1',
-            'audience.*'   => 'string|in:public,visitor,sympathizer,volunteer,member,local_official,regional_official,central_admin,super_admin',
-            'auto_share_social' => 'nullable',
-            'social_channels' => 'nullable|array',
-            'social_channels.*' => 'string|in:facebook,x,instagram,linkedin,whatsapp',
-            'party_branch_id' => 'nullable|exists:party_branches,id',
-            'image'        => 'nullable|file|mimes:jpg,jpeg,png,gif,webp|max:5120',
-            'attachment'   => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:10240',
-        ]);
+        $data = $request->validated();
 
         if (array_key_exists('is_published', $data)) {
             $data['is_published'] = $this->booleanInput($request, 'is_published');
@@ -270,7 +237,7 @@ class NewsController extends Controller
         unset($data['image'], $data['attachment']);
         $newsItem->update($data);
 
-        return response()->json($newsItem->load(['author', 'partyBranch']));
+        return new NewsResource($newsItem->load(['author', 'partyBranch']));
     }
 
     /**
