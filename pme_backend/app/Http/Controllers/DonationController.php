@@ -28,6 +28,7 @@ class DonationController extends Controller
             'donor_name' => 'nullable|string|max:255',
             'donor_email' => 'nullable|email',
             'amount' => 'required|numeric|min:1',
+            'rib' => 'required|string|max:64',
             'note' => 'nullable|string|max:1000',
             'frequency' => 'nullable|in:once,monthly',
         ]);

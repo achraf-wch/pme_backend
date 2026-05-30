@@ -9,7 +9,7 @@ class Donation extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'name', 'email', 'amount', 'note',
+        'name', 'email', 'amount', 'rib', 'note',
         'frequency', 'status', 'payment_reference', 'user_id'
     ];
 
